@@ -485,7 +485,7 @@ fn test_new_coalg() {
     let coa = Coalg::new(data);
     assert_eq!(coa.num_states(), 8);
     assert_eq!(&coa.backrefs, &vec![7,6,5,3,3,2,2,0,  7,5,1,1,0,  4,  4]); // 0,2,2,3,3,5,6,7,  0,1,1,5,7,  4,  4
-    assert_eq!(&coa.backrefs_locs, &vec![0,8,13,13,14,15]); // note that the states 5,6,7 have no corresponding entry because they are never referred to and are at the end
+    assert_eq!(&coa.backrefs_locs, &vec![0,8,13,13,14,15,15,15,15]); // note that the states 5,6,7 have no corresponding entry because they are never referred to and are at the end
     assert_eq!(&coa.state_backrefs(0), &vec![7,6,5,3,3,2,2,0]);
 }
 
@@ -1118,12 +1118,13 @@ impl DirtyPartitions {
     }
 }
 
-fn partref_nlogn(data: Vec<u32>) -> Vec<ID> {
+fn partref_nlogn_raw(data: Vec<u32>) -> Vec<ID> {
     // println!("===================== Starting partref_nlogn");
     // panic!("Stopped");
     let coa = Coalg::new(data);
     // coa.dump();
     // coa.dump_backrefs();
+    let mut iters = 0;
     let mut parts = DirtyPartitions::new(coa.num_states());
     while let Some(partition_id) = parts.worklist.pop() {
         let states = parts.refiners(partition_id);
@@ -1144,11 +1145,18 @@ fn partref_nlogn(data: Vec<u32>) -> Vec<ID> {
                 }
             }
         }
+        iters += 1;
+        // if iters > 47730 { panic!("Stop!") }
     }
+    println!("Number of iterations: {}", iters);
     // println!("===================== Ending partref_nlogn");
-    return renumber(&parts.partition_id);
+    return parts.partition_id;
 }
 
+fn partref_nlogn(data: Vec<u32>) -> Vec<ID> {
+    let ids = partref_nlogn_raw(data);
+    return renumber(&ids);
+}
 
 #[test]
 fn test_partref_nlogn() {
@@ -1170,6 +1178,19 @@ fn test_partref_nlogn() {
     // assert_eq!(&ids, &vec![0,1,2,3,4,5]);
 }
 
+#[test]
+fn test_partref_wlan() {
+    let filename = "benchmarks/small/wlan0_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_582327_771088_roundrobin_4.boa.txt";
+    let data = read_boa_txt(&filename);
+    let ids = partref_nlogn(data);
+    assert_eq!(*ids.iter().max().unwrap(), 107864);
+
+    let filename = "benchmarks/wlan/wlan1_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_1408676_1963522_roundrobin_32.boa.txt";
+    let data = read_boa_txt(&filename);
+    let ids = partref_nlogn(data);
+    assert_eq!(*ids.iter().max().unwrap(), 243324);
+}
+
 fn main() -> Result<(),()> {
     let args:Vec<String> = env::args().collect();
     // println!("args: {:?}", &args);
@@ -1188,7 +1209,7 @@ fn main() -> Result<(),()> {
     start_time = SystemTime::now();
     // let ids = partref_naive(&data);
     let ids = partref_nlogn(data);
-    println!("Number of states: {}, Number of partitions: {}", ids.len()-1, ids[ids.len()-1]);
+    println!("Number of states: {}, Number of partitions: {}", ids.len(), ids.iter().max().unwrap()+1);
     let computation_time = start_time.elapsed().unwrap();
     println!("Computation took {} seconds", computation_time.as_secs_f32());
 
