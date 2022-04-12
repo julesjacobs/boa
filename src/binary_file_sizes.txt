@@ -1,0 +1,230 @@
+If we store numbers as 64 bit:
+------------------------------
+"benchmarks/compare-copar-same/wta_Word,or_0,0,0,0,0,4_4630750_50_92615_32.boa.txt": 148.55446 Mb
+"benchmarks/compare-copar-same/wta_Word,or_0,0,0,0,4_4171550_50_83431_32.boa.txt": 117.137124 Mb
+"benchmarks/compare-copar-same/wta_Word,or_0,0,0,4_4721250_50_94425_32.boa.txt": 113.6877 Mb
+"benchmarks/compare-copar-same/wta_Word,or_0,0,4_6704100_50_134082_32.boa.txt": 134.618328 Mb
+"benchmarks/compare-copar-same/wta_Word,or_0,4_7605350_50_152107_32.boa.txt": 122.294028 Mb
+"benchmarks/compare-copar-same/wta_Z,max_0,0,0,0,0,4_4722550_50_94451_32.boa.txt": 151.499404 Mb
+"benchmarks/compare-copar-same/wta_Z,max_0,0,0,0,4_4643950_50_92879_32.boa.txt": 130.402116 Mb
+"benchmarks/compare-copar-same/wta_Z,max_0,0,0,4_5039950_50_100799_32.boa.txt": 121.361996 Mb
+"benchmarks/compare-copar-same/wta_Z,max_0,0,4_5904200_50_118084_32.boa.txt": 118.556336 Mb
+"benchmarks/compare-copar-same/wta_Z,max_0,4_7845650_50_156913_32.boa.txt": 126.158052 Mb
+"benchmarks/compare-copar-same/wta_powerset_0,0,0,0,0,4_4342600_2_86852_32.boa.txt": 104.569808 Mb
+"benchmarks/compare-copar-same/wta_powerset_0,0,0,0,4_4624550_2_92491_32.boa.txt": 92.860964 Mb
+"benchmarks/compare-copar-same/wta_powerset_0,0,0,4_6710350_2_134207_32.boa.txt": 107.902428 Mb
+"benchmarks/compare-copar-same/wta_powerset_0,0,4_6900000_2_138000_32.boa.txt": 83.352 Mb
+"benchmarks/compare-copar-same/wta_powerset_0,4_7743150_2_154863_32.boa.txt": 62.564652 Mb
+"benchmarks/fms/fms.sm_n=4_35910_237120_roundrobin_32.boa.txt": 2.98908 Mb
+"benchmarks/fms/fms.sm_n=5_152712_1111482_roundrobin_32.boa.txt": 13.948632 Mb
+"benchmarks/fms/fms.sm_n=6_537768_4205670_roundrobin_32.boa.txt": 52.619112 Mb
+"benchmarks/fms/fms.sm_n=7_1639440_13552968_roundrobin_32.boa.txt": 169.193376 Mb
+"benchmarks/fms/fms.sm_n=8_4459455_38533968_roundrobin_32.boa.txt": 480.245436 Mb
+
+"benchmarks/large/wta_Word,or_0,0,0,4_47212500_50_944250_32.boa.txt": 1136.877 Mb
+"benchmarks/large/wta_Z,max_0,0,0,4_50399500_50_1007990_32.boa.txt": 1213.61996 Mb
+"benchmarks/large/wta_powerset_0,0,0,4_65000000_2_1300000_32.boa.txt": 1045.2 Mb
+
+"benchmarks/scaling/wta_powerset_0,0,0,0,0,4_t4342600__86852_0_8.boa.txt": 104.569808 Mb
+"benchmarks/small/fms.sm_n=4_35910_237120_roundrobin_4.boa.txt": 2.98908 Mb
+"benchmarks/small/fms.sm_n=5_152712_1111482_roundrobin_4.boa.txt": 13.948632 Mb
+"benchmarks/small/wlan0_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_582327_771088_roundrobin_4.boa.txt": 7.576476 Mb
+"benchmarks/small/wta_Word,or_0,0,0,4_500000_50_10000_4.boa.txt": 12.04 Mb
+"benchmarks/small/wta_Z,max_0,0,0,4_500000_50_10000_4.boa.txt": 12.04 Mb
+"benchmarks/small/wta_powerset_0,0,0,4_500000_2_10000_4.boa.txt": 8.04 Mb
+"benchmarks/wlan/wlan0_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_582327_771088_roundrobin_32.boa.txt": 7.576476 Mb
+"benchmarks/wlan/wlan1_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_1408676_1963522_roundrobin_32.boa.txt": 19.58558 Mb
+"benchmarks/wlan/wlan2_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_1632799_5456481_roundrobin_32.boa.txt": 55.012676 Mb
+
+
+If we store numbers as 32 bit:
+------------------------------
+"benchmarks/compare-copar-same/wta_Word,or_0,0,0,0,0,4_4630750_50_92615_32.boa.txt": 130.03146 Mb
+"benchmarks/compare-copar-same/wta_Word,or_0,0,0,0,4_4171550_50_83431_32.boa.txt": 100.450924 Mb
+"benchmarks/compare-copar-same/wta_Word,or_0,0,0,4_4721250_50_94425_32.boa.txt": 94.8027 Mb
+"benchmarks/compare-copar-same/wta_Word,or_0,0,4_6704100_50_134082_32.boa.txt": 107.801928 Mb
+"benchmarks/compare-copar-same/wta_Word,or_0,4_7605350_50_152107_32.boa.txt": 91.872628 Mb
+"benchmarks/compare-copar-same/wta_Z,max_0,0,0,0,0,4_4722550_50_94451_32.boa.txt": 132.609204 Mb
+"benchmarks/compare-copar-same/wta_Z,max_0,0,0,0,4_4643950_50_92879_32.boa.txt": 111.826316 Mb
+"benchmarks/compare-copar-same/wta_Z,max_0,0,0,4_5039950_50_100799_32.boa.txt": 101.202196 Mb
+"benchmarks/compare-copar-same/wta_Z,max_0,0,4_5904200_50_118084_32.boa.txt": 94.939536 Mb
+"benchmarks/compare-copar-same/wta_Z,max_0,4_7845650_50_156913_32.boa.txt": 94.775452 Mb
+"benchmarks/compare-copar-same/wta_powerset_0,0,0,0,0,4_4342600_2_86852_32.boa.txt": 104.569808 Mb
+"benchmarks/compare-copar-same/wta_powerset_0,0,0,0,4_4624550_2_92491_32.boa.txt": 92.860964 Mb
+"benchmarks/compare-copar-same/wta_powerset_0,0,0,4_6710350_2_134207_32.boa.txt": 107.902428 Mb
+"benchmarks/compare-copar-same/wta_powerset_0,0,4_6900000_2_138000_32.boa.txt": 83.352 Mb
+"benchmarks/compare-copar-same/wta_powerset_0,4_7743150_2_154863_32.boa.txt": 62.564652 Mb
+"benchmarks/fms/fms.sm_n=4_35910_237120_roundrobin_32.boa.txt": 2.0406 Mb
+"benchmarks/fms/fms.sm_n=5_152712_1111482_roundrobin_32.boa.txt": 9.502704 Mb
+"benchmarks/fms/fms.sm_n=6_537768_4205670_roundrobin_32.boa.txt": 35.796432 Mb
+"benchmarks/fms/fms.sm_n=7_1639440_13552968_roundrobin_32.boa.txt": 114.981504 Mb
+"benchmarks/fms/fms.sm_n=8_4459455_38533968_roundrobin_32.boa.txt": 326.109564 Mb
+
+"benchmarks/large/wta_Word,or_0,0,0,4_47212500_50_944250_32.boa.txt": 948.027 Mb
+"benchmarks/large/wta_Z,max_0,0,0,4_50399500_50_1007990_32.boa.txt": 1012.02196 Mb
+"benchmarks/large/wta_powerset_0,0,0,4_65000000_2_1300000_32.boa.txt": 1045.2 Mb
+
+"benchmarks/scaling/wta_powerset_0,0,0,0,0,4_t4342600__86852_0_8.boa.txt": 104.569808 Mb
+"benchmarks/small/fms.sm_n=4_35910_237120_roundrobin_4.boa.txt": 2.0406 Mb
+"benchmarks/small/fms.sm_n=5_152712_1111482_roundrobin_4.boa.txt": 9.502704 Mb
+"benchmarks/small/wlan0_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_582327_771088_roundrobin_4.boa.txt": 5.82742 Mb
+"benchmarks/small/wta_Word,or_0,0,0,4_500000_50_10000_4.boa.txt": 10.04 Mb
+"benchmarks/small/wta_Z,max_0,0,0,4_500000_50_10000_4.boa.txt": 10.04 Mb
+"benchmarks/small/wta_powerset_0,0,0,4_500000_2_10000_4.boa.txt": 8.04 Mb
+"benchmarks/wlan/wlan0_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_582327_771088_roundrobin_32.boa.txt": 5.82742 Mb
+"benchmarks/wlan/wlan1_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_1408676_1963522_roundrobin_32.boa.txt": 14.935288 Mb
+"benchmarks/wlan/wlan2_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_1632799_5456481_roundrobin_32.boa.txt": 41.684772 Mb
+
+
+If we only store headers (32 bits) and values (64 bits):
+--------------------------------------------------------
+"benchmarks/compare-copar-same/wta_Word,or_0,0,0,0,0,4_4630750_50_92615_32.boa.txt": 55.93946 Mb
+"benchmarks/compare-copar-same/wta_Word,or_0,0,0,0,4_4171550_50_83431_32.boa.txt": 50.392324 Mb
+"benchmarks/compare-copar-same/wta_Word,or_0,0,0,4_4721250_50_94425_32.boa.txt": 57.0327 Mb
+"benchmarks/compare-copar-same/wta_Word,or_0,0,4_6704100_50_134082_32.boa.txt": 80.985528 Mb
+"benchmarks/compare-copar-same/wta_Word,or_0,4_7605350_50_152107_32.boa.txt": 91.872628 Mb
+"benchmarks/compare-copar-same/wta_Z,max_0,0,0,0,0,4_4722550_50_94451_32.boa.txt": 57.048404 Mb
+"benchmarks/compare-copar-same/wta_Z,max_0,0,0,0,4_4643950_50_92879_32.boa.txt": 56.098916 Mb
+"benchmarks/compare-copar-same/wta_Z,max_0,0,0,4_5039950_50_100799_32.boa.txt": 60.882596 Mb
+"benchmarks/compare-copar-same/wta_Z,max_0,0,4_5904200_50_118084_32.boa.txt": 71.322736 Mb
+"benchmarks/compare-copar-same/wta_Z,max_0,4_7845650_50_156913_32.boa.txt": 94.775452 Mb
+"benchmarks/compare-copar-same/wta_powerset_0,0,0,0,0,4_4342600_2_86852_32.boa.txt": 17.717808 Mb
+"benchmarks/compare-copar-same/wta_powerset_0,0,0,0,4_4624550_2_92491_32.boa.txt": 18.868164 Mb
+"benchmarks/compare-copar-same/wta_powerset_0,0,0,4_6710350_2_134207_32.boa.txt": 27.378228 Mb
+"benchmarks/compare-copar-same/wta_powerset_0,0,4_6900000_2_138000_32.boa.txt": 28.152 Mb
+"benchmarks/compare-copar-same/wta_powerset_0,4_7743150_2_154863_32.boa.txt": 31.592052 Mb
+"benchmarks/fms/fms.sm_n=4_35910_237120_roundrobin_32.boa.txt": 2.0406 Mb
+"benchmarks/fms/fms.sm_n=5_152712_1111482_roundrobin_32.boa.txt": 9.502704 Mb
+"benchmarks/fms/fms.sm_n=6_537768_4205670_roundrobin_32.boa.txt": 35.796432 Mb
+"benchmarks/fms/fms.sm_n=7_1639440_13552968_roundrobin_32.boa.txt": 114.981504 Mb
+"benchmarks/fms/fms.sm_n=8_4459455_38533968_roundrobin_32.boa.txt": 326.109564 Mb
+
+"benchmarks/large/wta_Word,or_0,0,0,4_47212500_50_944250_32.boa.txt": 570.327 Mb
+"benchmarks/large/wta_Z,max_0,0,0,4_50399500_50_1007990_32.boa.txt": 608.82596 Mb
+"benchmarks/large/wta_powerset_0,0,0,4_65000000_2_1300000_32.boa.txt": 265.2 Mb
+
+"benchmarks/scaling/wta_powerset_0,0,0,0,0,4_t4342600__86852_0_8.boa.txt": 17.717808 Mb
+"benchmarks/small/fms.sm_n=4_35910_237120_roundrobin_4.boa.txt": 2.0406 Mb
+"benchmarks/small/fms.sm_n=5_152712_1111482_roundrobin_4.boa.txt": 9.502704 Mb
+"benchmarks/small/wlan0_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_582327_771088_roundrobin_4.boa.txt": 5.82742 Mb
+"benchmarks/small/wta_Word,or_0,0,0,4_500000_50_10000_4.boa.txt": 6.04 Mb
+"benchmarks/small/wta_Z,max_0,0,0,4_500000_50_10000_4.boa.txt": 6.04 Mb
+"benchmarks/small/wta_powerset_0,0,0,4_500000_2_10000_4.boa.txt": 2.04 Mb
+"benchmarks/wlan/wlan0_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_582327_771088_roundrobin_32.boa.txt": 5.82742 Mb
+"benchmarks/wlan/wlan1_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_1408676_1963522_roundrobin_32.boa.txt": 14.935288 Mb
+"benchmarks/wlan/wlan2_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_1632799_5456481_roundrobin_32.boa.txt": 41.684772 Mb
+
+
+If we only had to store state names (as 32 bit):
+------------------------------------------------
+"benchmarks/compare-copar-same/wta_Word,or_0,0,0,0,0,4_4630750_50_92615_32.boa.txt": 92.615 Mb
+"benchmarks/compare-copar-same/wta_Word,or_0,0,0,0,4_4171550_50_83431_32.boa.txt": 66.7448 Mb
+"benchmarks/compare-copar-same/wta_Word,or_0,0,0,4_4721250_50_94425_32.boa.txt": 56.655 Mb
+"benchmarks/compare-copar-same/wta_Word,or_0,0,4_6704100_50_134082_32.boa.txt": 53.6328 Mb
+"benchmarks/compare-copar-same/wta_Word,or_0,4_7605350_50_152107_32.boa.txt": 30.4214 Mb
+"benchmarks/compare-copar-same/wta_Z,max_0,0,0,0,0,4_4722550_50_94451_32.boa.txt": 94.451 Mb
+"benchmarks/compare-copar-same/wta_Z,max_0,0,0,0,4_4643950_50_92879_32.boa.txt": 74.3032 Mb
+"benchmarks/compare-copar-same/wta_Z,max_0,0,0,4_5039950_50_100799_32.boa.txt": 60.4794 Mb
+"benchmarks/compare-copar-same/wta_Z,max_0,0,4_5904200_50_118084_32.boa.txt": 47.2336 Mb
+"benchmarks/compare-copar-same/wta_Z,max_0,4_7845650_50_156913_32.boa.txt": 31.3826 Mb
+"benchmarks/compare-copar-same/wta_powerset_0,0,0,0,0,4_4342600_2_86852_32.boa.txt": 86.852 Mb
+"benchmarks/compare-copar-same/wta_powerset_0,0,0,0,4_4624550_2_92491_32.boa.txt": 73.9928 Mb
+"benchmarks/compare-copar-same/wta_powerset_0,0,0,4_6710350_2_134207_32.boa.txt": 80.5242 Mb
+"benchmarks/compare-copar-same/wta_powerset_0,0,4_6900000_2_138000_32.boa.txt": 55.2 Mb
+"benchmarks/compare-copar-same/wta_powerset_0,4_7743150_2_154863_32.boa.txt": 30.9726 Mb
+"benchmarks/fms/fms.sm_n=4_35910_237120_roundrobin_32.boa.txt": 0.94848 Mb
+"benchmarks/fms/fms.sm_n=5_152712_1111482_roundrobin_32.boa.txt": 4.445928 Mb
+"benchmarks/fms/fms.sm_n=6_537768_4205670_roundrobin_32.boa.txt": 16.82268 Mb
+"benchmarks/fms/fms.sm_n=7_1639440_13552968_roundrobin_32.boa.txt": 54.211872 Mb
+"benchmarks/fms/fms.sm_n=8_4459455_38533968_roundrobin_32.boa.txt": 154.135872 Mb
+
+"benchmarks/large/wta_Word,or_0,0,0,4_47212500_50_944250_32.boa.txt": 566.55 Mb
+"benchmarks/large/wta_Z,max_0,0,0,4_50399500_50_1007990_32.boa.txt": 604.794 Mb
+"benchmarks/large/wta_powerset_0,0,0,4_65000000_2_1300000_32.boa.txt": 780 Mb
+
+"benchmarks/scaling/wta_powerset_0,0,0,0,0,4_t4342600__86852_0_8.boa.txt": 86.852 Mb
+"benchmarks/small/fms.sm_n=4_35910_237120_roundrobin_4.boa.txt": 0.94848 Mb
+"benchmarks/small/fms.sm_n=5_152712_1111482_roundrobin_4.boa.txt": 4.445928 Mb
+"benchmarks/small/wlan0_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_582327_771088_roundrobin_4.boa.txt": 1.749056 Mb
+"benchmarks/small/wta_Word,or_0,0,0,4_500000_50_10000_4.boa.txt": 6 Mb
+"benchmarks/small/wta_Z,max_0,0,0,4_500000_50_10000_4.boa.txt": 6 Mb
+"benchmarks/small/wta_powerset_0,0,0,4_500000_2_10000_4.boa.txt": 6 Mb
+"benchmarks/wlan/wlan0_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_582327_771088_roundrobin_32.boa.txt": 1.749056 Mb
+"benchmarks/wlan/wlan1_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_1408676_1963522_roundrobin_32.boa.txt": 4.650292 Mb
+"benchmarks/wlan/wlan2_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_1632799_5456481_roundrobin_32.boa.txt": 13.327904 Mb
+
+
+If we only store non-state values as 8 bits (headers & numbers):
+-----------------------------------------------------------------
+"benchmarks/compare-copar-same/wta_Word,or_0,0,0,0,0,4_4630750_50_92615_32.boa.txt": 13.984865 Mb
+"benchmarks/compare-copar-same/wta_Word,or_0,0,0,0,4_4171550_50_83431_32.boa.txt": 12.598081 Mb
+"benchmarks/compare-copar-same/wta_Word,or_0,0,0,4_4721250_50_94425_32.boa.txt": 14.258175 Mb
+"benchmarks/compare-copar-same/wta_Word,or_0,0,4_6704100_50_134082_32.boa.txt": 20.246382 Mb
+"benchmarks/compare-copar-same/wta_Word,or_0,4_7605350_50_152107_32.boa.txt": 22.968157 Mb
+"benchmarks/compare-copar-same/wta_Z,max_0,0,0,0,0,4_4722550_50_94451_32.boa.txt": 14.262101 Mb
+"benchmarks/compare-copar-same/wta_Z,max_0,0,0,0,4_4643950_50_92879_32.boa.txt": 14.024729 Mb
+"benchmarks/compare-copar-same/wta_Z,max_0,0,0,4_5039950_50_100799_32.boa.txt": 15.220649 Mb
+"benchmarks/compare-copar-same/wta_Z,max_0,0,4_5904200_50_118084_32.boa.txt": 17.830684 Mb
+"benchmarks/compare-copar-same/wta_Z,max_0,4_7845650_50_156913_32.boa.txt": 23.693863 Mb
+"benchmarks/compare-copar-same/wta_powerset_0,0,0,0,0,4_4342600_2_86852_32.boa.txt": 4.429452 Mb
+"benchmarks/compare-copar-same/wta_powerset_0,0,0,0,4_4624550_2_92491_32.boa.txt": 4.717041 Mb
+"benchmarks/compare-copar-same/wta_powerset_0,0,0,4_6710350_2_134207_32.boa.txt": 6.844557 Mb
+"benchmarks/compare-copar-same/wta_powerset_0,0,4_6900000_2_138000_32.boa.txt": 7.038 Mb
+"benchmarks/compare-copar-same/wta_powerset_0,4_7743150_2_154863_32.boa.txt": 7.898013 Mb
+"benchmarks/fms/fms.sm_n=4_35910_237120_roundrobin_32.boa.txt": 0.51015 Mb
+"benchmarks/fms/fms.sm_n=5_152712_1111482_roundrobin_32.boa.txt": 2.375676 Mb
+"benchmarks/fms/fms.sm_n=6_537768_4205670_roundrobin_32.boa.txt": 8.949108 Mb
+"benchmarks/fms/fms.sm_n=7_1639440_13552968_roundrobin_32.boa.txt": 28.745376 Mb
+"benchmarks/fms/fms.sm_n=8_4459455_38533968_roundrobin_32.boa.txt": 81.527391 Mb
+
+"benchmarks/large/wta_Word,or_0,0,0,4_47212500_50_944250_32.boa.txt": 142.58175 Mb
+"benchmarks/large/wta_Z,max_0,0,0,4_50399500_50_1007990_32.boa.txt": 152.20649 Mb
+"benchmarks/large/wta_powerset_0,0,0,4_65000000_2_1300000_32.boa.txt": 66.3 Mb
+
+"benchmarks/scaling/wta_powerset_0,0,0,0,0,4_t4342600__86852_0_8.boa.txt": 4.429452 Mb
+"benchmarks/small/fms.sm_n=4_35910_237120_roundrobin_4.boa.txt": 0.51015 Mb
+"benchmarks/small/fms.sm_n=5_152712_1111482_roundrobin_4.boa.txt": 2.375676 Mb
+"benchmarks/small/wlan0_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_582327_771088_roundrobin_4.boa.txt": 1.456855 Mb
+"benchmarks/small/wta_Word,or_0,0,0,4_500000_50_10000_4.boa.txt": 1.51 Mb
+"benchmarks/small/wta_Z,max_0,0,0,4_500000_50_10000_4.boa.txt": 1.51 Mb
+"benchmarks/small/wta_powerset_0,0,0,4_500000_2_10000_4.boa.txt": 0.51 Mb
+"benchmarks/wlan/wlan0_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_582327_771088_roundrobin_32.boa.txt": 1.456855 Mb
+"benchmarks/wlan/wlan1_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_1408676_1963522_roundrobin_32.boa.txt": 3.733822 Mb
+"benchmarks/wlan/wlan2_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_1632799_5456481_roundrobin_32.boa.txt": 10.421193 Mb
+
+
+
+Achieved storage for the most relevant benchmarks (and competitor):
+-------------------------------------------------------------------
+"benchmarks/wlan/wlan2_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_1632799_5456481_roundrobin_32.boa.txt": 13.327904+10.421193=23.749097 Mb (379 Mb x32)
+"benchmarks/fms/fms.sm_n=8_4459455_38533968_roundrobin_32.boa.txt": 154.135872+81.527391=235.663263 Mb (1690 Mb x32)
+"benchmarks/large/wta_Word,or_0,0,0,4_47212500_50_944250_32.boa.txt": 566.55+142.58175=709.13175 Mb (6786 Mb x32)
+"benchmarks/large/wta_Z,max_0,0,0,4_50399500_50_1007990_32.boa.txt": 604.794+152.20649=757.00049 Mb (5644 Mb x32)
+"benchmarks/large/wta_powerset_0,0,0,4_65000000_2_1300000_32.boa.txt": 780+66.3=846.3 Mb (7092 Mb x32)
+
+
+Per state 1 byte storage costs:
+-------------------------------
+"benchmarks/wlan/wlan2_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_1632799_5456481_roundrobin_32.boa.txt": 1.632799 Mb
+"benchmarks/fms/fms.sm_n=8_4459455_38533968_roundrobin_32.boa.txt": 4.459455 Mb
+"benchmarks/large/wta_Word,or_0,0,0,4_47212500_50_944250_32.boa.txt": 0.944250 Mb
+"benchmarks/large/wta_Z,max_0,0,0,4_50399500_50_1007990_32.boa.txt": 1.007990 Mb
+"benchmarks/large/wta_powerset_0,0,0,4_65000000_2_1300000_32.boa.txt": 1.300000 Mb
+
+
+Savings due to dictionary compression:
+--------------------------------------
+
+# Uncompressed:
+"benchmarks/fms/fms.sm_n=8_4459455_38533968_roundrobin_32.boa.txt": 326.109564 Mb
+"benchmarks/large/wta_Word,or_0,0,0,4_47212500_50_944250_32.boa.txt": 570.327 Mb
+"benchmarks/large/wta_Z,max_0,0,0,4_50399500_50_1007990_32.boa.txt": 608.82596 Mb
+"benchmarks/large/wta_powerset_0,0,0,4_65000000_2_1300000_32.boa.txt": 265.2 Mb
+"benchmarks/wlan/wlan2_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_1632799_5456481_roundrobin_32.boa.txt": 41.684772 Mb
+
+# Compressed:
+"benchmarks/fms/fms.sm_n=8_4459455_38533968_roundrobin_32.boa.txt": 81.527391 Mb
+"benchmarks/large/wta_Word,or_0,0,0,4_47212500_50_944250_32.boa.txt": 142.58175 Mb
+"benchmarks/large/wta_Z,max_0,0,0,4_50399500_50_1007990_32.boa.txt": 152.20649 Mb
+"benchmarks/large/wta_powerset_0,0,0,4_65000000_2_1300000_32.boa.txt": 66.3 Mb
+"benchmarks/wlan/wlan2_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_1632799_5456481_roundrobin_32.boa.txt": 10.421193 Mb
