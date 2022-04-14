@@ -2,12 +2,15 @@ Boa: Fast binary generic coalgebraic partition refinement
 ----------------------------------------------------------
 
 TODO:
-- Hash based repartition
-- Algorithm without backedges
-- Dictionary compressed representation
+- Hash based repartition [done]
+- Algorithm without backedges [done]
 - Optimize parser
-- Optimize repartition
+- Try different Hasher and HashMap
+- Try using sorting instead of hashing in various places
+- Hybrid algorithm
 - Optimize algorithm
+- Optimize exact repartition
+- Dictionary compressed representation
 - Run benchmarks on PC
 
 

@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 use std::{hash::{Hash, Hasher}, fs::File, io::{BufReader, BufRead, Read, ErrorKind}, path::Path, collections::{HashMap, hash_map::DefaultHasher, BTreeMap}, cmp::max, time::SystemTime, env};
 
+use itertools::Itertools;
 #[cfg(not(target_env = "msvc"))]
 use jemallocator::Jemalloc;
 
@@ -791,9 +792,10 @@ fn canonicalize_inexact_node<'a>(mut data : &'a [u32], ids: &[ID], w: u32) -> (u
                 let (sig, rest) = canonicalize_inexact(data, ids);
                 data = rest; sig
             }).collect();
-            repr.sort();
+            repr.sort_unstable();
             repr.dedup();
             repr.hash(&mut hasher);
+            // for &sig in repr.iter().dedup() { sig.hash(&mut hasher); }
         },
         ADD_TYP => {
             let mut repr: Vec<(u64,u64)> = (0..len).map(|_| {
@@ -885,7 +887,7 @@ fn repartition_inexact(coa : &Coalg, states: &[State], ids: &[ID]) -> Vec<u64> {
     sigs.reserve(states.len());
     for &state in states {
         let loc = coa.locs[state as usize];
-        let (sig,_rest) = canonicalize_inexact(&coa.data[loc+1..], ids);
+        let (sig,_rest) = canonicalize_inexact(&coa.data[loc..], ids);
         sigs.push(sig);
     }
     return sigs;
@@ -1108,7 +1110,15 @@ fn partref_naive(data: &[u32]) -> Vec<ID> {
         let start_time = SystemTime::now();
         let new_ids = repartition_all_inexact(data, &ids);
         let iter_time = start_time.elapsed().unwrap();
-        println!("- Iteration {} (refinement time = {} seconds)", iter, iter_time.as_secs_f32());
+
+        // debug iteration info
+        let mut new_ids2 = new_ids.clone();
+        new_ids2.sort_unstable();
+        new_ids2.dedup();
+        let num_parts = new_ids2.len();
+        println!("- Iteration {}, number of partitions: {} (refinement time = {} seconds)", iter, num_parts, iter_time.as_secs_f32());
+        // end debug info
+
         if new_ids[new_ids.len()-1] == new_ids.len() as u32 - 1 || new_ids == ids {
         // if new_ids == ids {
             println!("Number of iterations: {}", iter+1);

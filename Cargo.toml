@@ -18,5 +18,5 @@ incremental = false
 codegen-units = 16
 
 [profile.release]
-#lto = true
-#codegen-units = 1
+lto = true
+codegen-units = 1
