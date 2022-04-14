@@ -1,6 +1,17 @@
 Boa: Fast binary generic coalgebraic partition refinement
 ----------------------------------------------------------
 
+TODO:
+- Hash based repartition
+- Algorithm without backedges
+- Dictionary compressed representation
+- Optimize parser
+- Optimize repartition
+- Optimize algorithm
+- Run benchmarks on PC
+
+
+
 Primitive: given vec of states, compute refined partition (list of integer IDs)
 
 Data of algorithm:

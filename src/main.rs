@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-use std::{hash::Hash, fs::File, io::{BufReader, BufRead}, path::Path, collections::{HashMap, hash_map::DefaultHasher}, cmp::max, time::SystemTime, env};
+use std::{hash::{Hash, Hasher}, fs::File, io::{BufReader, BufRead, Read, ErrorKind}, path::Path, collections::{HashMap, hash_map::DefaultHasher}, cmp::max, time::SystemTime, env};
 
 // Binary representation & Parsing
 // ===============================
@@ -497,8 +497,8 @@ struct Tables {
     mon_table : HashMap<Vec<(ID,u64)>, ID>,
 }
 
-fn insert_or_op<F>(xs: &mut Vec<(ID,u64)>, key: ID, val: u64, op : F)
-where F : Fn(u64,u64) -> u64 {
+fn insert_or_op<A,F>(xs: &mut Vec<(A,u64)>, key: A, val: u64, op : F)
+where F : Fn(u64,u64) -> u64, A:Ord {
     let r = xs.binary_search_by(|(key2,_)| key2.cmp(&key));
     match r {
         Ok(i) => {
@@ -670,6 +670,182 @@ fn repartition(coa : &Coalg, states: &[State], ids: &[ID]) -> Vec<ID> {
     return renumber(&new_ids_raw);
 }
 
+
+// /// TODO: Make signature so that it returns the remaining slice instead of mutating loc:
+// /// fn canonicalize_inexact(data : &[u32], ids: &[ID]) -> (u64, &[u32])
+// fn canonicalize_inexact(data : &[u32], ids: &[ID], loc : &mut Loc) -> u64 {
+//     let w = data[*loc];
+//     if is_state(w) {
+//         *loc += 1;
+//         return ids[w as Loc] as u64
+//     } else {
+//         let typ = get_typ(w);
+//         let tag = get_tag(w);
+//         let len = get_len(w);
+//         let mut hasher = DefaultHasher::new();
+//         tag.hash(&mut hasher);
+//         *loc += 1;
+//         match typ {
+//             LIST_TYP => {
+//                 for _ in 0..len {
+//                     canonicalize_inexact(data, ids, loc).hash(&mut hasher);
+//                 }
+//             },
+//             SET_TYP => {
+//                 let mut children = vec![];
+//                 for _ in 0..len {
+//                     children.push(canonicalize_inexact(data, ids, loc));
+//                 }
+//                 children.sort();
+//                 children.dedup();
+//                 children.hash(&mut hasher);
+//             },
+//             ADD_TYP => {
+//                 let mut repr = vec![];
+//                 for _ in 0..len {
+//                     let n = canonicalize_inexact(data, ids, loc);
+//                     let x1 = data[*loc];
+//                     let x2 = data[*loc+1];
+//                     *loc += 2;
+//                     let w = x1 as u64 | ((x2 as u64) << 32);
+//                     insert_or_op(&mut repr, n, w, |a,b| a+b);
+//                 }
+//                 repr.hash(&mut hasher);
+//             },
+//             MAX_TYP => {
+//                 let mut repr = vec![];
+//                 for _ in 0..len {
+//                     let n = canonicalize_inexact(data, ids, loc);
+//                     let x1 = data[*loc];
+//                     let x2 = data[*loc+1];
+//                     *loc += 2;
+//                     let w = x1 as u64 | ((x2 as u64) << 32);
+//                     insert_or_op(&mut repr, n, w, |a,b| max(a,b));
+//                 }
+//                 repr.hash(&mut hasher);
+//             },
+//             OR_TYP => {
+//                 let mut repr = vec![];
+//                 for _ in 0..len {
+//                     let n = canonicalize_inexact(data, ids, loc);
+//                     let x1 = data[*loc];
+//                     let x2 = data[*loc+1];
+//                     *loc += 2;
+//                     let w = x1 as u64 | ((x2 as u64) << 32);
+//                     insert_or_op(&mut repr, n, w, |a,b| a|b);
+//                 }
+//                 repr.hash(&mut hasher);
+//             },
+//             _ => {
+//                 panic!("Unknown typ.")
+//             }
+//         }
+//         return hasher.finish();
+//     }
+// }
+
+fn hash_with_op<A,F,H>(repr: &mut [(A,u64)], hasher: &mut H, op: F)
+where F : Fn(u64,u64) -> u64, A:Ord+Copy+Hash, H:Hasher {
+    repr.sort_by_key(|kv| kv.0);
+    let mut i = 0;
+    while i < repr.len() {
+        let (x,v) = repr[i];
+        let mut vtot = v;
+        i += 1;
+        while i < repr.len() {
+            let (x2,v2) = repr[i];
+            if x == x2 {
+                i += 1;
+                vtot = op(vtot,v2);
+            } else { break }
+        }
+        (x,vtot).hash(hasher);
+    }
+}
+
+
+fn canonicalize_inexact<'a>(data : &'a [u32], ids: &[ID]) -> (u64, &'a [u32]) {
+    let w = data[0];
+    let mut data = &data[1..];
+    if is_state(w) {
+        return (ids[w as Loc] as u64, data);
+    } else {
+        let typ = get_typ(w);
+        let tag = get_tag(w);
+        let len = get_len(w);
+        let mut hasher = DefaultHasher::new();
+        tag.hash(&mut hasher);
+        match typ {
+            LIST_TYP => {
+                for _ in 0..len {
+                    let (sig, rest) = canonicalize_inexact(data, ids);
+                    sig.hash(&mut hasher);
+                    data = rest;
+                }
+            },
+            SET_TYP => {
+                let mut repr: Vec<u64> = (0..len).map(|_| {
+                    let (sig, rest) = canonicalize_inexact(data, ids);
+                    data = rest; sig
+                }).collect();
+                repr.sort();
+                repr.dedup();
+                repr.hash(&mut hasher);
+            },
+            ADD_TYP => {
+                let mut repr: Vec<(u64,u64)> = (0..len).map(|_| {
+                    let (sig, rest) = canonicalize_inexact(data, ids);
+                    let x1 = rest[0];
+                    let x2 = rest[1];
+                    data = &rest[2..];
+                    let w = x1 as u64 | ((x2 as u64) << 32);
+                    (sig,w)
+                }).collect();
+                hash_with_op(&mut repr, &mut hasher, |a,b| a+b);
+            },
+            MAX_TYP => {
+                let mut repr: Vec<(u64,u64)> = (0..len).map(|_| {
+                    let (sig, rest) = canonicalize_inexact(data, ids);
+                    let x1 = rest[0];
+                    let x2 = rest[1];
+                    data = &rest[2..];
+                    let w = x1 as u64 | ((x2 as u64) << 32);
+                    (sig,w)
+                }).collect();
+                hash_with_op(&mut repr, &mut hasher, |a,b| max(a,b));
+            },
+            OR_TYP => {
+                let mut repr: Vec<(u64,u64)> = (0..len).map(|_| {
+                    let (sig, rest) = canonicalize_inexact(data, ids);
+                    let x1 = rest[0];
+                    let x2 = rest[1];
+                    data = &rest[2..];
+                    let w = x1 as u64 | ((x2 as u64) << 32);
+                    (sig,w)
+                }).collect();
+                hash_with_op(&mut repr, &mut hasher, |a,b| a|b);
+            },
+            _ => {
+                panic!("Unknown typ.")
+            }
+        }
+        return (hasher.finish(), data);
+    }
+}
+
+
+fn repartition_inexact(coa : &Coalg, states: &[State], ids: &[ID]) -> Vec<u64> {
+    let mut sigs = vec![];
+    sigs.reserve(states.len());
+    for &state in states {
+        let loc = coa.locs[state as usize];
+        let (sig,_rest) = canonicalize_inexact(&coa.data[loc..], ids);
+        sigs.push(sig);
+    }
+    return sigs;
+}
+
+
 fn compute_ids_offset(offset: u32, data : &[u32], locs : &[usize], ids: &[ID]) -> Vec<u32> {
     let ids = compute_ids(data, locs, ids);
     let mut canon_map = HashMap::new();
@@ -770,21 +946,19 @@ fn compute_ids(data: &[u32], locs: &[usize], ids: &[ID]) -> Vec<u32> {
     return out
 }
 
-fn renumber(ids: &[u32]) -> Vec<u32> {
+fn renumber<A> (ids: &[A]) -> Vec<u32>
+where A:Hash+Eq {
     let mut canon_map = HashMap::new();
     let mut last_id = 0;
-    let mut new_ids = vec![];
-    for id in ids {
+    return ids.iter().map(|id| {
         if canon_map.contains_key(&id) {
-            new_ids.push(canon_map[&id]);
+            canon_map[&id]
         } else {
             canon_map.insert(id, last_id);
-            new_ids.push(last_id);
             last_id += 1;
+            last_id - 1
         }
-    }
-    // println!("Canon size: {}", canon_map.len());
-    return new_ids
+    }).collect();
 }
 
 // Renumber sigs to be 0..n, where n is the most commonly ocurring one
@@ -859,6 +1033,18 @@ fn repartition_all(data: &[u32], ids: &[ID]) -> Vec<ID> {
     return renumber(&new_ids_raw)
 }
 
+fn repartition_all_inexact(data: &[u32], ids: &[ID]) -> Vec<ID> {
+    let mut new_ids_raw = vec![];
+    new_ids_raw.reserve(ids.len());
+    let mut rest = data;
+    while rest.len() > 0 {
+        let (sig, rest_next) = canonicalize_inexact(rest, ids);
+        new_ids_raw.push(sig);
+        rest = rest_next;
+    }
+    return renumber(&new_ids_raw)
+}
+
 fn count_states(data: &[u32]) -> usize {
     let mut n = 0;
     let mut loc = 0;
@@ -872,10 +1058,11 @@ fn count_states(data: &[u32]) -> usize {
 fn partref_naive(data: &[u32]) -> Vec<ID> {
     let n = count_states(data);
     let mut ids = vec![0;n];
-    for iter in 0..1000 {
+    for iter in 0..1000000 {
         println!("iteration {}", iter);
-        let new_ids = repartition_all(data, &ids);
+        let new_ids = repartition_all_inexact(data, &ids);
         if new_ids == ids {
+            println!("Number of iterations: {}", iter);
             return ids
         } else {
             ids = new_ids;
@@ -1056,8 +1243,9 @@ impl DirtyPartitions {
 
     /// Time complexity: O(signatures.len())
     /// Returns vector of new partition ids
+    /// Signatures are assumed to be 0..n with the first starting with 0
     fn refine(self: &mut DirtyPartitions, partition_id: ID, signatures: &[u32]) -> Vec<u32> {
-        let signatures = renumber(signatures); // Renumber signatures to be 0..n. This makes the sig of the clean states 0 if there are any.
+        // let signatures = renumber(signatures); // Renumber signatures to be 0..n. This makes the sig of the clean states 0 if there are any.
 
         // compute the occurrence counts of each of the signatures
         let mut counts = counts_vec(&signatures);
@@ -1129,7 +1317,7 @@ fn partref_nlogn_raw(data: Vec<u32>) -> Vec<ID> {
     while let Some(partition_id) = parts.worklist.pop() {
         let states = parts.refiners(partition_id);
         // println!("states = {:?}", states);
-        let signatures = repartition(&coa, states, &parts.partition_id);
+        let signatures = renumber::<u64>(&repartition_inexact(&coa, states, &parts.partition_id));
         // println!("partition id = {:?}, partition = {:?}, states = {:?}, sigs = {:?}", partition_id, parts.partition[partition_id as usize], states, &signatures);
         let new_partitions = parts.refine(partition_id, &signatures);
         // println!("shrunk partition = {:?}, new partitions = {:?}, buffer = {:?}", parts.partition[partition_id as usize], &new_partitions.iter().map(|pid| parts.partition[*pid as usize]).collect::<Vec<(u32,u32,u32)>>(), &parts.buffer);
@@ -1148,7 +1336,7 @@ fn partref_nlogn_raw(data: Vec<u32>) -> Vec<ID> {
         iters += 1;
         // if iters > 47730 { panic!("Stop!") }
     }
-    println!("Number of iterations: {}", iters);
+    println!("Number of iterations: {} ", iters);
     // println!("===================== Ending partref_nlogn");
     return parts.partition_id;
 }
@@ -1173,9 +1361,9 @@ fn test_partref_nlogn() {
     let ids2 = partref_nlogn(data);
     assert_eq!(&ids1, &ids2);
 
-    // let data = read_boa_txt("tests/test2.boa.txt");
-    // let ids = partref_nlogn(data);
-    // assert_eq!(&ids, &vec![0,1,2,3,4,5]);
+    let data = read_boa_txt("tests/test2.boa.txt");
+    let ids = partref_nlogn(data);
+    assert_eq!(&ids, &vec![0,1,2,3,4,5]);
 }
 
 #[test]
@@ -1189,33 +1377,49 @@ fn test_partref_wlan() {
     let data = read_boa_txt(&filename);
     let ids = partref_nlogn(data);
     assert_eq!(*ids.iter().max().unwrap(), 243324);
+
+    let filename = "benchmarks/small/wlan0_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_582327_771088_roundrobin_4.boa.txt";
+    let data = read_boa_txt(&filename);
+    let ids = partref_naive(&data);
+    assert_eq!(*ids.iter().max().unwrap(), 107864);
+
+    let filename = "benchmarks/wlan/wlan1_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_1408676_1963522_roundrobin_32.boa.txt";
+    let data = read_boa_txt(&filename);
+    let ids = partref_naive(&data);
+    assert_eq!(*ids.iter().max().unwrap(), 243324);
 }
 
 fn main() -> Result<(),()> {
     let args:Vec<String> = env::args().collect();
     // println!("args: {:?}", &args);
-    let filename = &args[1];
+
+    // let filename = "tests/test1.boa.txt";
+    // let filename = "benchmarks/wlan/wlan0_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_582327_771088_roundrobin_32.boa.txt";
+    // let filename = "benchmarks/fms/fms.sm_n=4_35910_237120_roundrobin_32.boa.txt";
+    // let filename = "benchmarks/small/wlan0_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_582327_771088_roundrobin_4.boa.txt"; // 248502 106472
+    let filename = "benchmarks/fms/fms.sm_n=8_4459455_38533968_roundrobin_32.boa.txt";
+    // let filename = "benchmarks/wlan/wlan2_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_1632799_5456481_roundrobin_32.boa.txt";
+    // let filename = "benchmarks/large/wta_powerset_0,0,0,4_65000000_2_1300000_32.boa.txt";
+
+    let filename =
+        if args.len() > 1 { &args[1] }
+        else { filename };
+
     let mut start_time = SystemTime::now();
-    println!("Starting parsing {}...", filename);
-    // let data = read_boa_txt("tests/test1.boa.txt");
-    // let data = read_boa_txt("benchmarks/wlan/wlan0_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_582327_771088_roundrobin_32.boa.txt");
-    // let data = read_boa_txt("benchmarks/fms/fms.sm_n=4_35910_237120_roundrobin_32.boa.txt");
-    // let data = read_boa_txt("benchmarks/small/wlan0_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_582327_771088_roundrobin_4.boa.txt"); // 248502 106472
-    // let data = read_boa_txt("benchmarks/fms/fms.sm_n=8_4459455_38533968_roundrobin_32.boa.txt");
+    println!("Starting parsing {}... ", filename);
     let data = read_boa_txt(filename);
     let parsing_time = start_time.elapsed().unwrap();
     println!("Parsing done, size: {} in {} seconds", data.len(), parsing_time.as_secs_f32());
 
     start_time = SystemTime::now();
-    // let ids = partref_naive(&data);
     let ids = partref_nlogn(data);
+    // let ids = partref_naive(&data);
     println!("Number of states: {}, Number of partitions: {}", ids.len(), ids.iter().max().unwrap()+1);
     let computation_time = start_time.elapsed().unwrap();
     println!("Computation took {} seconds", computation_time.as_secs_f32());
 
     // let coa = Coalg::new(data);
     // println!("Number of states: {}", coa.num_states());
-
 
     // let mut i = 0;
     // for id in ids {
