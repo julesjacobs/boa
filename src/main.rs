@@ -1,7 +1,14 @@
 #![allow(dead_code)]
-use std::{hash::{Hash, Hasher}, fs::File, io::{BufReader, BufRead, Read, ErrorKind}, path::Path, collections::{HashMap, hash_map::DefaultHasher, BTreeMap}, cmp::max, time::SystemTime, env};
+use std::{hash::{Hash, Hasher}, fs::File, io::{BufReader, BufRead}, path::Path, cmp::max, time::SystemTime, env};
+use ahash::AHasher;
+use ahash::AHashMap;
 
-use itertools::Itertools;
+// This hasher is much faster than the default one
+fn new_hasher() -> AHasher { AHasher::new_with_keys(1234, 5678) }
+type HMap<K,V> = AHashMap<K,V>;
+
+// Using a different allocator also makes a huge difference
+// I've found jemalloc to be better than mimalloc, both in terms of speed and memory use
 #[cfg(not(target_env = "msvc"))]
 use jemallocator::Jemalloc;
 
@@ -327,32 +334,31 @@ fn test_node_to_string(){
     assert_eq!(out, "Set[2]{@32,@43,Add[4]{@87:54,@87:54}}")
 }
 
-fn test_parse_node12(inp : &str, expected: &str) {
-    // Parse inp then convert back to string and check if they're equal
-    let n = parse_node_string(inp);
-    let mut out: String = String::from("");
-    node_to_string(n, &mut out);
-    assert_eq!(out, expected);
-
-    // Parse inp then convert to binary then parse binary then back
-    // to string and check if they're equal
-    let n = parse_node_string(inp);
-    let mut outb: Vec<u32> = vec![];
-    node_to_bin(&n,&mut outb);
-    let mut i = 0;
-    let n2 = parse_node_bin(&outb, &mut i);
-    assert_eq!(i,outb.len());
-
-    let mut out: String = String::from("");
-    node_to_string(n2, &mut out);
-    assert_eq!(out, expected);
-}
-fn test_parse_node1(inp : &str) {
-    test_parse_node12(inp,inp)
-}
-
 #[test]
 fn test_parse_node() {
+    fn test_parse_node12(inp : &str, expected: &str) {
+        // Parse inp then convert back to string and check if they're equal
+        let n = parse_node_string(inp);
+        let mut out: String = String::from("");
+        node_to_string(n, &mut out);
+        assert_eq!(out, expected);
+
+        // Parse inp then convert to binary then parse binary then back
+        // to string and check if they're equal
+        let n = parse_node_string(inp);
+        let mut outb: Vec<u32> = vec![];
+        node_to_bin(&n,&mut outb);
+        let mut i = 0;
+        let n2 = parse_node_bin(&outb, &mut i);
+        assert_eq!(i,outb.len());
+
+        let mut out: String = String::from("");
+        node_to_string(n2, &mut out);
+        assert_eq!(out, expected);
+    }
+    fn test_parse_node1(inp : &str) {
+        test_parse_node12(inp,inp)
+    }
     test_parse_node1("Set[2]{@32,@43,Add[4]{@87:54,@87:54}}");
     test_parse_node1("List[2]{@32,@43,Add[4]{@87:54,@87:54}}");
     test_parse_node1("List[2]{@32,@43,Add[4]{@87:54,@87:54}}");
@@ -502,8 +508,8 @@ type ID = u32; // represents canonical ID of a state or sub-node of a state
 
 struct Tables {
     last_id : ID,
-    coll_table : HashMap<Vec<ID>, ID>,
-    mon_table : HashMap<Vec<(ID,u64)>, ID>,
+    coll_table : HMap<Vec<ID>, ID>,
+    mon_table : HMap<Vec<(ID,u64)>, ID>,
 }
 
 fn insert_or_op<A,F>(xs: &mut Vec<(A,u64)>, key: A, val: u64, op : F)
@@ -648,8 +654,8 @@ fn canonicalize_test () {
     let data = read_boa_txt("tests/test1.boa.txt");
     let mut tables = Tables {
         last_id: 0,
-        coll_table: HashMap::new(),
-        mon_table: HashMap::new()
+        coll_table: HMap::new(),
+        mon_table: HMap::new()
     };
     let ids = vec![0,0,0,0];
     let mut loc = 0;
@@ -668,8 +674,8 @@ fn canonicalize_test () {
 fn repartition(coa : &Coalg, states: &[State], ids: &[ID]) -> Vec<ID> {
     let mut tables = Tables {
         last_id: 0,
-        coll_table: HashMap::new(),
-        mon_table: HashMap::new()
+        coll_table: HMap::new(),
+        mon_table: HMap::new()
     };
     let mut new_ids_raw = vec![];
     for &state in states {
@@ -691,7 +697,7 @@ fn canonicalize_inexact_old(data : &[u32], ids: &[ID], loc : &mut Loc) -> u64 {
         let typ = get_typ(w);
         let tag = get_tag(w);
         let len = get_len(w);
-        let mut hasher = DefaultHasher::new();
+        let mut hasher = new_hasher();
         tag.hash(&mut hasher);
         *loc += 1;
         match typ {
@@ -777,7 +783,7 @@ fn canonicalize_inexact_node<'a>(mut data : &'a [u32], ids: &[ID], w: u32) -> (u
     let typ = get_typ(w);
     let tag = get_tag(w);
     let len = get_len(w);
-    let mut hasher = DefaultHasher::new();
+    let mut hasher = new_hasher();
     tag.hash(&mut hasher);
     match typ {
         LIST_TYP => {
@@ -818,29 +824,6 @@ fn canonicalize_inexact_node<'a>(mut data : &'a [u32], ids: &[ID], w: u32) -> (u
                 (sig,w)
             }).collect();
             hash_with_op(&mut repr, &mut hasher, |a,b| max(a,b));
-            // let mut repr: BTreeMap<u64,u64> = BTreeMap::new();
-            // for _ in 0..len {
-            //     let (sig, rest) = canonicalize_inexact(data, ids);
-            //     let x1 = rest[0];
-            //     let x2 = rest[1];
-            //     let w = x1 as u64 | ((x2 as u64) << 32);
-            //     data = &rest[2..];
-            //     if repr.contains_key(&sig) {
-            //         repr.insert(sig, max(repr[&sig],w));
-            //     } else {
-            //         repr.insert(sig, w);
-            //     }
-            // }
-            // repr.hash(&mut hasher);
-            // let mut repr: Vec<(u64,u64)> = (0..len).map(|_| {
-            //     let (sig, rest) = canonicalize_inexact(data, ids);
-            //     let x1 = rest[0];
-            //     let x2 = rest[1];
-            //     data = &rest[2..];
-            //     let w = x1 as u64 | ((x2 as u64) << 32);
-            //     (sig,w)
-            // }).collect();
-            // hash_with_op(&mut repr, &mut hasher, |a,b| max(a,b));
         },
         OR_TYP => {
             let mut repr: Vec<(u64,u64)> = (0..len).map(|_| {
@@ -894,23 +877,6 @@ fn repartition_inexact(coa : &Coalg, states: &[State], ids: &[ID]) -> Vec<u64> {
 }
 
 
-fn compute_ids_offset(offset: u32, data : &[u32], locs : &[usize], ids: &[ID]) -> Vec<u32> {
-    let ids = compute_ids(data, locs, ids);
-    let mut canon_map = HashMap::new();
-    let mut last_id = offset;
-    let mut ids_offset = vec![];
-    for id in ids {
-        if canon_map.contains_key(&id) {
-            ids_offset.push(canon_map[&id]);
-        } else {
-            canon_map.insert(id, last_id);
-            ids_offset.push(last_id);
-            last_id += 1;
-        }
-    }
-    return ids_offset;
-}
-
 fn skip_state(data: &[u32], loc: &mut usize) {
     let w = data[*loc];
     if is_state(w) {
@@ -949,21 +915,14 @@ fn all_locs(data: &[u32]) -> Vec<usize> {
     return locs
 }
 
-fn compute_all_ids(data : &[u32]) -> Vec<u32> {
-    let locs = all_locs(data);
-    let ids = vec![0;locs.len()];
-    return compute_ids_offset(0, data, &locs, &ids);
-}
-
 #[test]
 fn test_compute_all_ids() {
     let data = read_boa_txt("tests/test1.boa.txt");
-    let ids = compute_all_ids(&data);
+    let ids = repartition_all_inexact(&data, &vec![0,0,0,0,0,0,0,0]);
     assert_eq!(&ids, &vec![0,0,1,1,1,2,2,3]);
-    let ids2 = compute_ids_offset(0, &data, &all_locs(&data), &ids);
-    assert_eq!(&ids2, &vec![0,0,1,1,2,3,3,4]);
+    let ids = repartition_all(&data, &vec![0,0,0,0,0,0,0,0]);
+    assert_eq!(&ids, &vec![0,0,1,1,1,2,2,3]);
 }
-
 
 fn read_boa_txt<P>(filename: P) -> Vec<u32>
 where P: AsRef<Path>, {
@@ -978,25 +937,9 @@ where P: AsRef<Path>, {
     return data
 }
 
-/// Computes ids for the states
-/// Data stores a binary representation of the coalgebra
-fn compute_ids(data: &[u32], locs: &[usize], ids: &[ID]) -> Vec<u32> {
-    let mut tables = Tables {
-        last_id: 0,
-        coll_table: HashMap::new(),
-        mon_table: HashMap::new()
-    };
-    let mut out = vec![];
-    for &loc in locs {
-        let mut loc_mut = loc;
-        out.push(canonicalize(data, ids, &mut loc_mut, &mut tables));
-    }
-    return out
-}
-
 fn renumber<A> (ids: &[A]) -> Vec<u32>
 where A:Hash+Eq {
-    let mut canon_map = HashMap::new();
+    let mut canon_map = HMap::new();
     let mut last_id = 0;
     return ids.iter().map(|id| {
         if canon_map.contains_key(&id) {
@@ -1062,7 +1005,7 @@ fn cumsum(xs: &[u32]) -> Vec<u32> {
 
 #[test]
 fn test_cumsum() {
-    let mut xs = vec![2,3,1,2,0,4];
+    let xs = vec![2,3,1,2,0,4];
     assert_eq!(cumsum(&xs), vec![2,5,6,8,8,12]);
 }
 
@@ -1070,8 +1013,8 @@ fn test_cumsum() {
 fn repartition_all(data: &[u32], ids: &[ID]) -> Vec<ID> {
     let mut tables = Tables {
         last_id: 0,
-        coll_table: HashMap::new(),
-        mon_table: HashMap::new()
+        coll_table: HMap::new(),
+        mon_table: HMap::new()
     };
     let mut new_ids_raw = vec![];
     let mut loc_mut = 0;
@@ -1137,8 +1080,8 @@ fn test_partref_naive() {
     assert_eq!(&ids, &vec![0,0,1,1,2,3,3,4]);
 }
 
-fn counts<T>(xs: &[T]) -> HashMap<T,u32> where T:Hash+Eq+Copy {
-    let mut counts : HashMap<T,u32> = HashMap::new();
+fn counts<T>(xs: &[T]) -> HMap<T,u32> where T:Hash+Eq+Copy {
+    let mut counts : HMap<T,u32> = HMap::new();
     for &x in xs {
         if counts.contains_key(&x) {
             counts.insert(x,counts[&x]+1);
@@ -1195,7 +1138,7 @@ fn test_index_of_max() {
     assert_eq!(index_of_max(&vec![0,3,1,2,3,4,3]), 5);
 }
 
-fn max_count(counts: &HashMap<ID,u32>) -> Option<ID> {
+fn max_count(counts: &HMap<ID,u32>) -> Option<ID> {
     counts.iter().max_by_key(|kv| *kv.1).map(|kv| *kv.0)
 }
 
@@ -1204,11 +1147,6 @@ fn test_max_count() {
     let counts = counts(&vec![0,0,1,1,3,4,5,5,5]);
     let max_count = max_count(&counts);
     assert_eq!(max_count, Some(5));
-}
-
-/// Sorts the slices efficiently using bucket sort, by keys
-fn bucket_sort_mut(keys: &mut [u32], vals: &mut [u32]) {
-
 }
 
 /// Renumber the ids from next_fresh_id onwards
@@ -1221,7 +1159,7 @@ fn renumber_offset(ids: &[ID], next_fresh_id: ID, old_id: ID, extra_count_for_la
     let id_with_max_count = max_count(&counts).expect("The first argument (ids) shouldn't be empty.");
     let mut new_ids = vec![];
     let mut next_id = next_fresh_id;
-    let mut canon_map: HashMap<ID,ID> = HashMap::new();
+    let mut canon_map: HMap<ID,ID> = HMap::new();
     for &id in ids {
         if id == id_with_max_count {
             new_ids.push(old_id);
@@ -1314,7 +1252,7 @@ impl DirtyPartitions {
         // sort the relevant part of self.buffer by signature
         // also restores invariant for self.position and self.partition_id
         let largest_partition = index_of_max(&counts) as u32;
-        let mut next_available_partition_id = self.partition.len() as u32;
+        let next_available_partition_id = self.partition.len() as u32;
 
         let mut cum_counts = cumsum(&counts);
         let original_states = self.refiners(partition_id).to_vec();
@@ -1472,8 +1410,8 @@ fn main() -> Result<(),()> {
     println!("Parsing done, size: {} in {} seconds", data.len(), parsing_time.as_secs_f32());
 
     start_time = SystemTime::now();
-    // let ids = partref_nlogn(data);
     let ids = partref_naive(&data);
+    // let ids = partref_nlogn(data);
     println!("Number of states: {}, Number of partitions: {}", ids.len(), ids.iter().max().unwrap()+1);
     let computation_time = start_time.elapsed().unwrap();
     println!("Computation took {} seconds", computation_time.as_secs_f32());

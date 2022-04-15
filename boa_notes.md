@@ -4,8 +4,8 @@ Boa: Fast binary generic coalgebraic partition refinement
 TODO:
 - Hash based repartition [done]
 - Algorithm without backedges [done]
+- Try different Hasher and HashMap [done]
 - Optimize parser
-- Try different Hasher and HashMap
 - Try using sorting instead of hashing in various places
 - Hybrid algorithm
 - Optimize algorithm
