@@ -1,11 +1,16 @@
 #![allow(dead_code)]
 use std::{hash::{Hash, Hasher}, fs::File, io::{BufReader, BufRead}, path::Path, cmp::max, time::SystemTime, env};
+
+// // AHash is much faster than the default one, but slower than FxHash
 use ahash::AHasher;
 use ahash::AHashMap;
+// fn new_hasher() -> AHasher { AHasher::new_with_keys(1234, 5678) }
+// type HMap<K,V> = AHashMap<K,V>;
 
-// This hasher is much faster than the default one
-fn new_hasher() -> AHasher { AHasher::new_with_keys(1234, 5678) }
-type HMap<K,V> = AHashMap<K,V>;
+// FxHash appears to be the winner
+use fxhash::{FxHashMap, FxHasher64};
+fn new_hasher() -> FxHasher64 { FxHasher64::default() }
+type HMap<K,V> = FxHashMap<K,V>;
 
 // Using a different allocator also makes a huge difference
 // I've found jemalloc to be better than mimalloc, both in terms of speed and memory use
@@ -654,8 +659,8 @@ fn canonicalize_test () {
     let data = read_boa_txt("tests/test1.boa.txt");
     let mut tables = Tables {
         last_id: 0,
-        coll_table: HMap::new(),
-        mon_table: HMap::new()
+        coll_table: HMap::default(),
+        mon_table: HMap::default()
     };
     let ids = vec![0,0,0,0];
     let mut loc = 0;
@@ -674,8 +679,8 @@ fn canonicalize_test () {
 fn repartition(coa : &Coalg, states: &[State], ids: &[ID]) -> Vec<ID> {
     let mut tables = Tables {
         last_id: 0,
-        coll_table: HMap::new(),
-        mon_table: HMap::new()
+        coll_table: HMap::default(),
+        mon_table: HMap::default()
     };
     let mut new_ids_raw = vec![];
     for &state in states {
@@ -839,22 +844,188 @@ fn test_repartition_all() {
     assert_eq!(&ids, &vec![0,0,1,1,1,2,2,3]);
 }
 
+fn read_expect<'a>(inp: &'a [u8], chr: u8) -> &'a [u8] {
+    if inp.len() == 0 || inp[0] != chr {
+        panic!("Expecting {:?}, got {:?}.", chr as char, String::from_utf8(inp.to_vec()).unwrap());
+    }
+    return &inp[1..];
+}
+
+fn read_tag<'a>(inp: &'a [u8]) -> (u8,&'a [u8]) {
+    let inp = read_expect(inp, b'[');
+    let (tag,n) = lexical::parse_partial::<u8,_>(inp).expect("Expected a number in tag [_].");
+    (tag, read_expect(&inp[n..], b']'))
+}
+
+#[test]
+fn test_read_tag() {
+    assert_eq!(read_tag("[123]abc".as_bytes()), (123, "abc".as_bytes()));
+}
+
+fn read_coll<'a>(inp: &'a [u8], out: &mut Vec<u32>, typ: u8) -> &'a [u8] {
+    let (tag, inp) = read_tag(inp);
+    let header_index = out.len();
+    out.push(0);
+    let mut inp = read_expect(inp, b'{');
+    let mut len = 0;
+    if inp.len() == 0 { panic!("Unexpected end of input at start of collection.") }
+    if inp[0] == b'}' {
+        out[header_index] = coll_w(typ, tag, len);
+        return &inp[1..];
+    }
+    loop {
+        inp = read_node(inp, out);
+        len += 1;
+        if inp.len() == 0 { panic!("Unexpected end of input in collection.") }
+        if inp[0] == b'}' {
+            out[header_index] = coll_w(typ, tag, len);
+            return &inp[1..]
+        }
+        inp = read_expect(inp, b',');
+    }
+}
+
+#[test]
+fn test_read_coll() {
+    let mut out = vec![];
+    assert_eq!(read_coll("[123]{@12,@13,@14}abc".as_bytes(), &mut out, LIST_TYP), "abc".as_bytes());
+    assert_eq!(out, vec![coll_w(LIST_TYP, 123, 3),12,13,14]);
+}
+
+fn read_mon<'a>(inp: &'a [u8], out: &mut Vec<u32>, typ: u8) -> &'a [u8] {
+    let (tag, inp) = read_tag(inp);
+    let header_index = out.len();
+    out.push(0);
+    let mut inp = read_expect(inp, b'{');
+    let mut len = 0;
+    if inp.len() == 0 { panic!("Unexpected end of input at start of monoid.") }
+    if inp[0] == b'}' {
+        out[header_index] = coll_w(typ, tag, len);
+        return &inp[1..];
+    }
+    loop {
+        inp = read_node(inp, out);
+        len += 1;
+        inp = read_expect(inp, b':');
+        let (val,n) = lexical::parse_partial::<u64,_>(inp).expect("Expected a number after ':'.");
+        inp = &inp[n..];
+        out.push(val as u32);
+        out.push((val >> 32) as  u32);
+        if inp.len() == 0 { panic!("Unexpected end of input in monoid.") }
+        if inp[0] == b'}' {
+            out[header_index] = coll_w(typ, tag, len);
+            return &inp[1..]
+        }
+        inp = read_expect(inp, b',');
+    }
+}
+
+#[test]
+fn test_read_mon() {
+    let mut out = vec![];
+    assert_eq!(read_mon("[123]{@12:5,@13:6,@14:7}abc".as_bytes(), &mut out, ADD_TYP), "abc".as_bytes());
+    assert_eq!(out, vec![coll_w(ADD_TYP, 123, 3),12,5,0,13,6,0,14,7,0]);
+}
+
+fn read_node<'a>(inp: &'a [u8], out: &mut Vec<u32>) -> &'a [u8] {
+    if inp.len() == 0 { panic!("Expected start of a node, but input is empty.") }
+    let chr = inp[0];
+    let orig = inp;
+    let inp = &inp[1..];
+    match chr {
+        b'@' => {
+            let (state,n) = lexical::parse_partial::<u32,_>(inp).expect("Expected a number after '@'.");
+            assert!(is_state(state));
+            out.push(state);
+            return &inp[n..];
+        },
+        b'L' => {
+            if inp.len() < 3 || inp[0..3] != [b'i', b's', b't'] {
+                panic!("Expected \"List\", got {:?}", String::from_utf8(orig.to_vec()).unwrap());
+            }
+            return read_coll(&inp[3..], out, LIST_TYP);
+        },
+        b'S' => {
+            if inp.len() < 2 || inp[0..2] != [b'e', b't'] {
+                panic!("Expected \"Set\" got {:?}", String::from_utf8(orig.to_vec()).unwrap());
+            }
+            return read_coll(&inp[2..], out, SET_TYP);
+        },
+        b'A' => {
+            if inp.len() < 2 || inp[0..2] != [b'd', b'd'] {
+                panic!("Expected \"Add\" got {:?}", String::from_utf8(orig.to_vec()).unwrap());
+            }
+            return read_mon(&inp[2..], out, ADD_TYP);
+        },
+        b'O' => {
+            if inp.len() < 1 || inp[0..1] != [b'r'] {
+                panic!("Expected \"Or\" got {:?}", String::from_utf8(orig.to_vec()).unwrap());
+            }
+            return read_mon(&inp[1..], out, OR_TYP);
+        },
+        b'M' => {
+            if inp.len() < 2 || inp[0..2] != [b'a', b'x'] {
+                panic!("Expected \"Max\", got {:?}", String::from_utf8(orig.to_vec()).unwrap());
+            }
+            return read_mon(&inp[2..], out, MAX_TYP);
+        },
+        _ => { panic!("Expected start of a node, but got {:?}.", String::from_utf8(orig.to_vec()).unwrap()) }
+    }
+}
+
+#[test]
+fn test_read_node() {
+    let mut out = vec![];
+    assert_eq!(read_node("List[123]{@12,@13,@14}abc".as_bytes(), &mut out), "abc".as_bytes());
+    assert_eq!(out, vec![coll_w(LIST_TYP, 123, 3),12,13,14]);
+
+    let mut out = vec![];
+    assert_eq!(read_node("Set[123]{@12,@13,@14}abc".as_bytes(), &mut out), "abc".as_bytes());
+    assert_eq!(out, vec![coll_w(SET_TYP, 123, 3),12,13,14]);
+
+    let mut out = vec![];
+    assert_eq!(read_node("Set[123]{}abc".as_bytes(), &mut out), "abc".as_bytes());
+    assert_eq!(out, vec![coll_w(SET_TYP, 123, 0)]);
+
+    let mut out = vec![];
+    assert_eq!(read_node("Add[123]{@12:5,@13:6,@14:7}abc".as_bytes(), &mut out), "abc".as_bytes());
+    assert_eq!(out, vec![coll_w(ADD_TYP, 123, 3),12,5,0,13,6,0,14,7,0]);
+
+    let mut out = vec![];
+    assert_eq!(read_node("Max[123]{@12:5,@13:6,@14:7}abc".as_bytes(), &mut out), "abc".as_bytes());
+    assert_eq!(out, vec![coll_w(MAX_TYP, 123, 3),12,5,0,13,6,0,14,7,0]);
+
+    let mut out = vec![];
+    assert_eq!(read_node("Or[123]{@12:5,@13:6,@14:7}abc".as_bytes(), &mut out), "abc".as_bytes());
+    assert_eq!(out, vec![coll_w(OR_TYP, 123, 3),12,5,0,13,6,0,14,7,0]);
+
+    let mut out = vec![];
+    assert_eq!(read_node("Or[123]{}abc".as_bytes(), &mut out), "abc".as_bytes());
+    assert_eq!(out, vec![coll_w(OR_TYP, 123, 0)]);
+}
+
+
 fn read_boa_txt<P>(filename: P) -> Vec<u32>
 where P: AsRef<Path>, {
     let file = File::open(&filename).
         expect(&format!("Couldn't open file {:?}", filename.as_ref().display().to_string()));
-    let reader = BufReader::new(file);
+    let mut reader = BufReader::new(file);
+    let mut line = vec![];
     let mut data : Vec<u32> = vec![];
-    for line in reader.lines() {
-        let node = parse_node_string(&line.expect("Bad line"));
-        node_to_bin(&node,&mut data);
+    while 0 < reader.read_until(b'\n', &mut line).expect("Failure while reading file.") {
+        let remaining = read_node(&line, &mut data);
+        if remaining.len() > 1 {
+            panic!("Did not parse everything on the line: {:?} remaining (complete input was: {:?})",
+                    String::from_utf8(remaining.to_vec()).unwrap(), String::from_utf8(line.clone()).unwrap());
+        }
+        line.clear();
     }
     return data
 }
 
 fn renumber<A> (ids: &[A]) -> Vec<u32>
 where A:Hash+Eq {
-    let mut canon_map = HMap::new();
+    let mut canon_map = HMap::default();
     let mut last_id = 0;
     return ids.iter().map(|id| {
         if canon_map.contains_key(&id) {
@@ -898,8 +1069,8 @@ fn test_cumsum() {
 fn repartition_all(data: &[u32], ids: &[ID]) -> Vec<ID> {
     let mut tables = Tables {
         last_id: 0,
-        coll_table: HMap::new(),
-        mon_table: HMap::new()
+        coll_table: HMap::default(),
+        mon_table: HMap::default()
     };
     let mut new_ids_raw = vec![];
     let mut loc_mut = 0;
@@ -1313,8 +1484,8 @@ fn main() -> Result<(),()> {
     println!("Parsing done, size: {} in {} seconds", data.len(), parsing_time.as_secs_f32());
 
     start_time = SystemTime::now();
-    let ids = partref_naive(&data);
-    // let ids = partref_nlogn(data);
+    // let ids = partref_naive(&data);
+    let ids = partref_nlogn(data);
     println!("Number of states: {}, Number of partitions: {}", ids.len(), ids.iter().max().unwrap()+1);
     let computation_time = start_time.elapsed().unwrap();
     println!("Computation took {} seconds", computation_time.as_secs_f32());

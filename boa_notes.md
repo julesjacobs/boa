@@ -5,14 +5,16 @@ TODO:
 - Hash based repartition [done]
 - Algorithm without backedges [done]
 - Try different Hasher and HashMap [done]
-- Optimize parser
-- Integrate renumber instead of building an intermediate vec
-- Try using sorting instead of hashing in various places
+- Optimize parser [done]
 - Hybrid algorithm
+- Select largest partition according to how many predecessors it has
+- Integrate renumber instead of building an intermediate vec
 - Optimize algorithm
 - Optimize exact repartition
-- Dictionary compressed representation
 - Run benchmarks on PC
+
+- Dictionary compressed representation
+- Try using sorting instead of hashing in various places
 
 
 
