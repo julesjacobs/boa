@@ -6,6 +6,7 @@ TODO:
 - Algorithm without backedges [done]
 - Try different Hasher and HashMap [done]
 - Optimize parser
+- Integrate renumber instead of building an intermediate vec
 - Try using sorting instead of hashing in various places
 - Hybrid algorithm
 - Optimize algorithm

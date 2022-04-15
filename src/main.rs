@@ -685,80 +685,6 @@ fn repartition(coa : &Coalg, states: &[State], ids: &[ID]) -> Vec<ID> {
     return renumber(&new_ids_raw);
 }
 
-
-// /// TODO: Make signature so that it returns the remaining slice instead of mutating loc:
-// /// fn canonicalize_inexact(data : &[u32], ids: &[ID]) -> (u64, &[u32])
-fn canonicalize_inexact_old(data : &[u32], ids: &[ID], loc : &mut Loc) -> u64 {
-    let w = data[*loc];
-    if is_state(w) {
-        *loc += 1;
-        return ids[w as Loc] as u64
-    } else {
-        let typ = get_typ(w);
-        let tag = get_tag(w);
-        let len = get_len(w);
-        let mut hasher = new_hasher();
-        tag.hash(&mut hasher);
-        *loc += 1;
-        match typ {
-            LIST_TYP => {
-                for _ in 0..len {
-                    canonicalize_inexact_old(data, ids, loc).hash(&mut hasher);
-                }
-            },
-            SET_TYP => {
-                let mut children = vec![];
-                for _ in 0..len {
-                    children.push(canonicalize_inexact_old(data, ids, loc));
-                }
-                children.sort();
-                children.dedup();
-                children.hash(&mut hasher);
-            },
-            ADD_TYP => {
-                let mut repr = vec![];
-                for _ in 0..len {
-                    let n = canonicalize_inexact_old(data, ids, loc);
-                    let x1 = data[*loc];
-                    let x2 = data[*loc+1];
-                    *loc += 2;
-                    let w = x1 as u64 | ((x2 as u64) << 32);
-                    insert_or_op(&mut repr, n, w, |a,b| a+b);
-                }
-                repr.hash(&mut hasher);
-            },
-            MAX_TYP => {
-                let mut repr = vec![];
-                for _ in 0..len {
-                    let n = canonicalize_inexact_old(data, ids, loc);
-                    let x1 = data[*loc];
-                    let x2 = data[*loc+1];
-                    *loc += 2;
-                    let w = x1 as u64 | ((x2 as u64) << 32);
-                    insert_or_op(&mut repr, n, w, |a,b| max(a,b));
-                }
-                repr.hash(&mut hasher);
-            },
-            OR_TYP => {
-                let mut repr = vec![];
-                for _ in 0..len {
-                    let n = canonicalize_inexact_old(data, ids, loc);
-                    let x1 = data[*loc];
-                    let x2 = data[*loc+1];
-                    *loc += 2;
-                    let w = x1 as u64 | ((x2 as u64) << 32);
-                    insert_or_op(&mut repr, n, w, |a,b| a|b);
-                }
-                repr.hash(&mut hasher);
-            },
-            _ => {
-                panic!("Unknown typ.")
-            }
-        }
-        return hasher.finish();
-    }
-}
-
 #[inline]
 fn hash_with_op<A,F,H>(repr: &mut [(A,u64)], hasher: &mut H, op: F)
 where F : Fn(u64,u64) -> u64, A:Ord+Copy+Hash, H:Hasher {
@@ -854,17 +780,6 @@ fn canonicalize_inexact<'a>(data : &'a [u32], ids: &[ID]) -> (u64, &'a [u32]) {
     }
 }
 
-fn repartition_inexact_old(coa : &Coalg, states: &[State], ids: &[ID]) -> Vec<u64> {
-    let mut sigs = vec![];
-    sigs.reserve(states.len());
-    for &state in states {
-        let mut loc = coa.locs[state as usize];
-        sigs.push(canonicalize_inexact_old(&coa.data, ids, &mut loc));
-    }
-    return sigs;
-}
-
-
 fn repartition_inexact(coa : &Coalg, states: &[State], ids: &[ID]) -> Vec<u64> {
     let mut sigs = vec![];
     sigs.reserve(states.len());
@@ -916,7 +831,7 @@ fn all_locs(data: &[u32]) -> Vec<usize> {
 }
 
 #[test]
-fn test_compute_all_ids() {
+fn test_repartition_all() {
     let data = read_boa_txt("tests/test1.boa.txt");
     let ids = repartition_all_inexact(&data, &vec![0,0,0,0,0,0,0,0]);
     assert_eq!(&ids, &vec![0,0,1,1,1,2,2,3]);
@@ -950,36 +865,6 @@ where A:Hash+Eq {
             last_id - 1
         }
     }).collect();
-}
-
-// Renumber sigs to be 0..n, where n is the most commonly ocurring one
-fn renumber_with_most_frequent_last(sigs: &[u32], extra_count_for_last: u32) -> Vec<u32> {
-    if sigs.is_empty() { return vec![] }
-
-    let mut rsigs = renumber(sigs);
-
-    let mut counts = counts_vec(&rsigs);
-    *counts.last_mut().unwrap() += extra_count_for_last;
-
-    let most_frequent_sig = index_of_max(&counts) as u32;
-    let largest_sig = (counts.len()-1) as u32;
-
-    // swap the largest sig and most frequent sig
-    for sig in rsigs.iter_mut() {
-        if *sig == most_frequent_sig { *sig = largest_sig }
-        else if *sig == largest_sig { *sig = most_frequent_sig }
-    }
-
-    return rsigs
-}
-
-#[test]
-fn test_renumber_with_most_frequent_last() {
-    assert_eq!(renumber_with_most_frequent_last(&vec![], 23), vec![]);
-    assert_eq!(renumber_with_most_frequent_last(&vec![0,0,1], 0), vec![1,1,0]);
-    assert_eq!(renumber_with_most_frequent_last(&vec![0,0,1], 10), vec![0,0,1]);
-    assert_eq!(renumber_with_most_frequent_last(&vec![34,43,54,34,34,54], 0), vec![2,1,0,2,2,0]);
-    assert_eq!(renumber_with_most_frequent_last(&vec![34,43,54,34,34,54], 10), vec![0,1,2,0,0,2]);
 }
 
 fn cumsum_mut(xs: &mut [u32]) {
@@ -1046,9 +931,96 @@ fn count_states(data: &[u32]) -> usize {
     return n
 }
 
+fn canonicalize_inexact_node_init<'a>(mut data : &'a [u32], w: u32) -> (u64, &'a [u32]) {
+    let typ = get_typ(w);
+    let tag = get_tag(w);
+    let len = get_len(w);
+    let mut hasher = new_hasher();
+    tag.hash(&mut hasher);
+    match typ {
+        LIST_TYP => {
+            for _ in 0..len {
+                let (sig, rest) = canonicalize_inexact_init(data);
+                sig.hash(&mut hasher);
+                data = rest;
+            }
+        },
+        SET_TYP => {
+            let mut repr: Vec<u64> = (0..len).map(|_| {
+                let (sig, rest) = canonicalize_inexact_init(data);
+                data = rest; sig
+            }).collect();
+            repr.sort_unstable();
+            repr.dedup();
+            repr.hash(&mut hasher);
+            // for &sig in repr.iter().dedup() { sig.hash(&mut hasher); }
+        },
+        ADD_TYP => {
+            let mut repr: Vec<(u64,u64)> = (0..len).map(|_| {
+                let (sig, rest) = canonicalize_inexact_init(data);
+                let x1 = rest[0];
+                let x2 = rest[1];
+                data = &rest[2..];
+                let w = x1 as u64 | ((x2 as u64) << 32);
+                (sig,w)
+            }).collect();
+            hash_with_op(&mut repr, &mut hasher, |a,b| a+b);
+        },
+        MAX_TYP => {
+            let mut repr: Vec<(u64,u64)> = (0..len).map(|_| {
+                let (sig, rest) = canonicalize_inexact_init(data);
+                let x1 = rest[0];
+                let x2 = rest[1];
+                data = &rest[2..];
+                let w = x1 as u64 | ((x2 as u64) << 32);
+                (sig,w)
+            }).collect();
+            hash_with_op(&mut repr, &mut hasher, |a,b| max(a,b));
+        },
+        OR_TYP => {
+            let mut repr: Vec<(u64,u64)> = (0..len).map(|_| {
+                let (sig, rest) = canonicalize_inexact_init(data);
+                let x1 = rest[0];
+                let x2 = rest[1];
+                data = &rest[2..];
+                let w = x1 as u64 | ((x2 as u64) << 32);
+                (sig,w)
+            }).collect();
+            hash_with_op(&mut repr, &mut hasher, |a,b| a|b);
+        },
+        _ => {
+            panic!("Unknown typ.")
+        }
+    }
+    return (hasher.finish(), data);
+}
+
+#[inline]
+fn canonicalize_inexact_init<'a>(data : &'a [u32]) -> (u64, &'a [u32]) {
+    let w = data[0];
+    let data = &data[1..];
+    if is_state(w) {
+        return (0, data);
+    } else {
+        return canonicalize_inexact_node_init(data, w);
+    }
+}
+
+fn init_partition_ids(data: &[u32]) -> Vec<u32> {
+    let mut new_ids_raw = vec![];
+    let mut rest = data;
+    while rest.len() > 0 {
+        let (sig, rest_next) = canonicalize_inexact_init(rest);
+        new_ids_raw.push(sig);
+        rest = rest_next;
+    }
+    return renumber(&new_ids_raw)
+}
+
 fn partref_naive(data: &[u32]) -> Vec<ID> {
-    let n = count_states(data);
-    let mut ids = vec![0;n];
+    // let n = count_states(data);
+    // let mut ids = vec![0;n];
+    let mut ids = init_partition_ids(data);
     for iter in 0..1000000 {
         let start_time = SystemTime::now();
         let new_ids = repartition_all_inexact(data, &ids);
@@ -1059,7 +1031,7 @@ fn partref_naive(data: &[u32]) -> Vec<ID> {
         new_ids2.sort_unstable();
         new_ids2.dedup();
         let num_parts = new_ids2.len();
-        println!("- Iteration {}, number of partitions: {} (refinement time = {} seconds)", iter, num_parts, iter_time.as_secs_f32());
+        // println!("- Iteration {}, number of partitions: {} (refinement time = {} seconds)", iter, num_parts, iter_time.as_secs_f32());
         // end debug info
 
         if new_ids[new_ids.len()-1] == new_ids.len() as u32 - 1 || new_ids == ids {
@@ -1078,28 +1050,6 @@ fn test_partref_naive() {
     let data = read_boa_txt("tests/test1.boa.txt");
     let ids = partref_naive(&data);
     assert_eq!(&ids, &vec![0,0,1,1,2,3,3,4]);
-}
-
-fn counts<T>(xs: &[T]) -> HMap<T,u32> where T:Hash+Eq+Copy {
-    let mut counts : HMap<T,u32> = HMap::new();
-    for &x in xs {
-        if counts.contains_key(&x) {
-            counts.insert(x,counts[&x]+1);
-        } else {
-            counts.insert(x,1);
-        }
-    }
-    return counts
-}
-
-#[test]
-fn test_counts() {
-    let counts = counts(&vec![0,0,1,1,3,4,5,5,5]);
-    assert_eq!(counts[&0],2);
-    assert_eq!(counts[&1],2);
-    assert_eq!(counts[&3],1);
-    assert_eq!(counts[&4],1);
-    assert_eq!(counts[&5],3);
 }
 
 fn counts_vec(xs: &[u32]) -> Vec<u32> {
@@ -1136,53 +1086,6 @@ fn index_of_max(counts: &[u32]) -> usize {
 #[test]
 fn test_index_of_max() {
     assert_eq!(index_of_max(&vec![0,3,1,2,3,4,3]), 5);
-}
-
-fn max_count(counts: &HMap<ID,u32>) -> Option<ID> {
-    counts.iter().max_by_key(|kv| *kv.1).map(|kv| *kv.0)
-}
-
-#[test]
-fn test_max_count() {
-    let counts = counts(&vec![0,0,1,1,3,4,5,5,5]);
-    let max_count = max_count(&counts);
-    assert_eq!(max_count, Some(5));
-}
-
-/// Renumber the ids from next_fresh_id onwards
-/// The most frequently occurring ID gets given old_id instead
-/// The last element gets counted with extra_count_for_last
-fn renumber_offset(ids: &[ID], next_fresh_id: ID, old_id: ID, extra_count_for_last: u32) -> Vec<ID> {
-    let mut counts = counts(ids);
-    let last_id = ids[ids.len()-1];
-    counts.insert(last_id, counts[&last_id] + extra_count_for_last);
-    let id_with_max_count = max_count(&counts).expect("The first argument (ids) shouldn't be empty.");
-    let mut new_ids = vec![];
-    let mut next_id = next_fresh_id;
-    let mut canon_map: HMap<ID,ID> = HMap::new();
-    for &id in ids {
-        if id == id_with_max_count {
-            new_ids.push(old_id);
-        } else {
-            if canon_map.contains_key(&id) {
-                new_ids.push(canon_map[&id]);
-            } else {
-                canon_map.insert(id,next_id);
-                new_ids.push(next_id);
-                next_id += 1;
-            }
-        }
-    }
-    return new_ids
-}
-
-#[test]
-fn test_renumber_offset() {
-    let ids = vec![22,22,33,22,33,44,44,44,44,11,11];
-    let new_ids = renumber_offset(&ids, 5, 42, 0);
-    assert_eq!(new_ids,vec![5,5,6,5,6,42,42,42,42,7,7]);
-    let new_ids = renumber_offset(&ids, 5, 42, 100);
-    assert_eq!(new_ids,vec![5,5,6,5,6,7,7,7,7,42,42]);
 }
 
 struct DirtyPartitions {
