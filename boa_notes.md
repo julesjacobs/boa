@@ -7,17 +7,28 @@ TODO:
 - Try different Hasher and HashMap [done]
 - Optimize parser [done]
 - Write canonicalize_inexact with raw pointers [done]
+- Save binary representation in separate file
+- Dictionary compressed representation
 - Hybrid algorithm: keep using naive as long as number of partitions doubles every iteration
 - Make algorithm safe against hash collisions
 - New benchmarks
+
+- Introduce additional types, Loc, ID, State, etc.
+- Remove unsafe as much as possible.
 - Select largest partition according to how many predecessors it has
+  (does this have an effect on the asymptotic complexity?)
 - Integrate renumber instead of building an intermediate vec
 - Optimize algorithm
 - Optimize exact repartition
 - Run benchmarks on PC
-
-- Dictionary compressed representation
 - Try using sorting instead of hashing in various places
+
+
+Does selecting largest partition according to how many predecessors it has have an effect on asymptotic complexity?
+----------------------------------------------------
+States get a new number at most log(n) times -- no longer true.
+
+
 
 
 

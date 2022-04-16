@@ -1,25 +1,19 @@
 #![allow(dead_code)]
 use std::{hash::{Hash, Hasher}, fs::File, io::{BufReader, BufRead}, path::Path, cmp::max, time::SystemTime, env};
+use itertools::Itertools;
 
-unsafe fn read_u64(buf: &[u8], i: usize) -> u64 {
-    let x = buf[i..i+8].try_into().map(u64::from_ne_bytes).unwrap();
-    let y = *(buf.as_ptr() as *const u64);
-    return y;
-}
+//====================//
+// Hasher & allocator //
+//====================//
 
-// // AHash is much faster than the default one, but slower than FxHash
-// use ahash::AHasher;
-// use ahash::AHashMap;
-// fn new_hasher() -> AHasher { AHasher::new_with_keys(1234, 5678) }
-// type HMap<K,V> = AHashMap<K,V>;
-
-// FxHash appears to be the winner
+// FxHash appears to be the winner.
+// Although AHash is a lot faster than the default hasher, I've found FxHash to be even faster.
 use fxhash::{FxHashMap, FxHasher64};
 fn new_hasher() -> FxHasher64 { FxHasher64::default() }
 type HMap<K,V> = FxHashMap<K,V>;
 
-// Using a different allocator also makes a huge difference
-// I've found jemalloc to be better than mimalloc, both in terms of speed and memory use
+// Using a different allocator also makes a huge difference.
+// I've found jemalloc to be better than mimalloc, both in terms of speed and memory use.
 #[cfg(not(target_env = "msvc"))]
 use jemallocator::Jemalloc;
 
@@ -27,44 +21,47 @@ use jemallocator::Jemalloc;
 #[global_allocator]
 static GLOBAL: Jemalloc = Jemalloc;
 
-// Binary representation & Parsing
-// ===============================
 
-/// Checks if the word w is a state or not
-fn is_state(w: u32) -> bool {
-    return w >> 31 == 0;
-}
+//=======================//
+// Binary representation //
+//=======================//
 
-/// Computes a state's word
-fn state_w(w: u32) -> u32 {
-    debug_assert!(w >> 31 == 0);
-    return w
-}
+// The binary representation works as follows (everything is little endian).
+// If the last bit of the first byte is 0, it is a single dictionary compressed byte (so we have a header dictionary with 128 entries)
+// If the last two bits of the first byte are 01, the rest of the bits are a 4-byte state (thus we support up to 2^30 states).
+// If the last two bits of the first byte are 11, it is a header.
+// A header's first byte is its typ (indicating whether it is a list/set/add/or/max node).
+// A header's second byte is its tag (just some additional data to distinguish states, e.g. different constructors of algebraic data type with the same length).
+// A header's third and fourth byte are the len of the collection.
+// For lists/sets, we then encode sequence of len states.
+// For add/or/max, we then encode a sequence of len (state,value).
+// Values are encoded as follows: if the last bit of the first byte is 0, then it is dictionary compressed (so we have a value dictionary with 128 entries).
+// If the last bit of the first byte is 1, then the remaining bits encode the 63 bit value.
 
-/// Computes a non-state's word
-fn nonstate_w(w: u32) -> u32 {
-    debug_assert!(w >> 31 == 0);
-    return w | (1 << 31);
-}
 
-/// Computes a collection header word
-/// * typ has to be 0..128
-fn coll_w(typ: u8, tag: u8, len: u16) -> u32 {
-    debug_assert!(typ <= 128);
-    return nonstate_w((u32::from(typ)<<24) + (u32::from(tag)<<16) + u32::from(len));
-}
+/// Compression tag
+fn is_compressed32(w: u32) -> bool { w & 1 == 0 }
+fn get_compressed32(w: u32) -> u8 { (w as u8) >> 1 }
+fn get_noncompressed32(w: u32) -> u32 { w >> 1 }
+fn put_noncompressed32(w: u32) -> u32 { (w << 1) | 1}
 
-fn get_typ(w: u32) -> u8 {
-    return (w>>24 & 0b01111111) as u8
-}
+fn is_compressed64(w: u64) -> bool { w & 1 == 0 }
+fn get_compressed64(w: u64) -> u8 { (w as u8) >> 1 }
+fn get_noncompressed64(w: u64) -> u64 { w >> 1 }
+fn put_noncompressed64(w: u64) -> u64 { (w << 1) | 1}
 
-fn get_tag(w: u32) -> u8 {
-    return (w>>16) as u8
-}
+fn put_compressed8(w: u8) -> u8 { w << 1 }
 
-fn get_len(w: u32) -> u16 {
-    return w as u16
-}
+/// Assumes that the compressed bit has already been removed
+fn is_state(w: u32) -> bool { w & 1 == 0 }
+fn get_state(w: u32) -> u32 { w >> 1 }
+fn get_header(w: u32) -> u32 { w >> 1 }
+fn put_state(w: u32) -> u32 { w << 1 }
+fn put_header(w: u32) -> u32 { (w << 1) | 1 }
+
+/// Assumes that the header tag has already been removed
+fn decode_header(w: u32) -> (u8,u8,u16) { ((w >> 24) as u8, (w >> 16) as u8, w as u16) }
+fn encode_header(typ: u8, tag: u8, len: u16) -> u32 { ((typ as u32) << 24) | ((tag as u32) << 16) | (len as u32) }
 
 const LIST_TYP: u8 = 0;
 const SET_TYP: u8 = 1;
@@ -73,351 +70,451 @@ const MAX_TYP: u8 = 3;
 const OR_TYP: u8 = 4;
 
 #[test]
-fn test_binrep(){
-    assert_eq!(coll_w(2, 3, 8), 0x82030008);
-    assert_eq!(state_w(34234234), 34234234);
-    assert_eq!(get_typ(coll_w(2, 3, 8)), 2);
-    assert_eq!(get_tag(coll_w(2, 3, 8)), 3);
-    assert_eq!(get_len(coll_w(2, 3, 8)), 8);
-    assert_eq!(get_typ(coll_w(LIST_TYP, 3, 8)), LIST_TYP);
+fn test_binary_representation() {
+    assert_eq!(decode_header(encode_header(1,2,3)), (1,2,3));
+    assert_eq!(decode_header(encode_header(1,u8::MAX,u16::MAX)), (1,u8::MAX,u16::MAX));
+    assert_eq!(decode_header(get_header(
+                 put_header(encode_header(127,u8::MAX,u16::MAX)))),
+               (127,u8::MAX,u16::MAX));
+    assert_eq!(decode_header(get_header(get_noncompressed32(
+                put_noncompressed32(put_header(encode_header(63,u8::MAX,u16::MAX)))))),
+              (63,u8::MAX,u16::MAX));
 }
 
 
+//=========================================//
+// Dictionary compressed readers & writers //
+//=========================================//
 
+struct CReader {
+    headers: [u32;128],
+    values: [u64;128],
+}
+
+impl CReader {
+    unsafe fn read_node(self: &Self, data: *const u8) -> (u32, *const u8) {
+        let x = *(data as *const u32);
+        if is_compressed32(x) { (self.headers[get_compressed32(x) as usize], data.add(1)) }
+        else { (get_noncompressed32(x), data.add(4)) }
+    }
+
+    unsafe fn read_value(self: &Self, data: *const u8) -> (u64, *const u8) {
+        let x = *(data as *const u64);
+        if is_compressed64(x) { (self.values[get_compressed64(x) as usize], data.add(1)) }
+        else { (get_noncompressed64(x), data.add(8)) }
+    }
+
+    unsafe fn read_node_mut(self: &Self, data: &mut *const u8) -> u32 {
+        let (x,data2) = self.read_node(*data);
+        *data = data2;
+        return x;
+    }
+
+    unsafe fn read_value_mut(self: &Self, data: &mut *const u8) -> u64 {
+        let (x,data2) = self.read_value(*data);
+        *data = data2;
+        return x;
+    }
+
+    unsafe fn is_at_end(data: &[u8], p: *const u8) -> bool {
+        return data.as_ptr().add(data.len()) == p
+    }
+}
+
+struct CWriter {
+    headers_map: HMap<u32,u8>,
+    values_map: HMap<u64,u8>,
+    headers: [u32;128],
+    values: [u64;128],
+    data: Vec<u8>,
+}
+
+impl CWriter {
+    fn new() -> CWriter {
+        CWriter {
+            headers_map: HMap::default(),
+            values_map: HMap::default(),
+            headers: [0;128],
+            values: [0;128],
+            data: vec![]
+        }
+    }
+
+    fn finish(mut self: Self) -> (Vec<u8>, CReader) {
+        self.data.reserve(7); // make sure to not trigger undefined behaviour by reading u64 at the last byte
+        return (self.data, CReader {
+            headers: self.headers,
+            values: self.values,
+        })
+    }
+
+    fn write_node(self: &mut Self, node: u32) {
+        if self.headers_map.contains_key(&node) {
+            self.data.push(self.headers_map[&node])
+        } else {
+            if self.headers_map.len() < 128 {
+                let i = self.headers_map.len() as u8;
+                self.headers_map.insert(node, put_compressed8(i));
+                self.headers[i as usize] = node;
+                self.data.push(put_compressed8(i));
+            } else {
+                // self.headers_map.insert(node, 255);
+                // println!("Headers map size: {}", self.headers_map.len());
+                // panic!("Node dict full");
+                self.data.extend(u32::to_ne_bytes(put_noncompressed32(node)))
+            }
+        }
+    }
+
+    fn write_node_noncompressed(self: &mut Self, node: u32) {
+        self.data.extend(u32::to_ne_bytes(put_noncompressed32(node)))
+    }
+
+    fn write_value(self: &mut Self, value: u64) {
+        if self.values_map.contains_key(&value) {
+            self.data.push(self.values_map[&value])
+        } else {
+            if self.values_map.len() < 128 {
+                let i = self.values_map.len() as u8;
+                self.values_map.insert(value, put_compressed8(i));
+                self.values[i as usize] = value;
+                self.data.push(put_compressed8(i));
+            } else {
+                // panic!("Value dict full");
+                self.data.extend(u64::to_ne_bytes(put_noncompressed64(value)))
+            }
+        }
+    }
+}
+
+#[test]
+fn test_creader_cwriter() {
+    let mut w = CWriter::new();
+    for _ in 0..10 {
+        for i in 0..1000 { w.write_node(i) }
+        for i in 0..1000 { w.write_value(i) }
+    }
+    let (data, r) = w.finish();
+    assert_eq!(data.len(), 10*(128 + (1000-128)*4 + 128 + (1000-128)*8));
+    let mut p = data.as_ptr();
+    unsafe {
+        for _ in 0..10 {
+            for i in 0..1000 { assert_eq!(r.read_node_mut(&mut p), i) }
+            for i in 0..1000 { assert_eq!(r.read_value_mut(&mut p), i) }
+        }
+    }
+}
+
+
+//=================================//
+// Convert between text and binary //
+//=================================//
+
+#[derive(PartialEq)]
 #[derive(Debug)]
-enum Node {
+pub enum Node {
     State(u32),
-    Coll(u8, u8, Vec<Node>),
-    Mon(u8, u8, Vec<(Node,u64)>)
+    Coll(u8,u8,Vec<Node>),
+    Mon(u8,u8,Vec<(Node,u64)>)
 }
 
-fn node_to_string(n: Node, buf: &mut String) {
-    match n {
-        Node::State(s) => {
-            buf.push_str("@");
-            buf.push_str(&s.to_string())
-        }
-        Node::Coll(typ,tag,ns) => {
-            match typ {
-                LIST_TYP => buf.push_str("List"),
-                SET_TYP => buf.push_str("Set"),
-                _ => panic!("Bad typ for Coll")
-            }
-            buf.push_str("["); buf.push_str(&tag.to_string()); buf.push_str("]");
-            buf.push_str("{");
-            let mut is_first = true;
-            for n2 in ns {
-                if is_first { is_first = false; }
-                else { buf.push_str(","); }
-                node_to_string(n2,buf);
-            }
-            buf.push_str("}");
-        }
-        Node::Mon(typ,tag,cs) => {
-            match typ {
-                ADD_TYP => buf.push_str("Add"),
-                MAX_TYP => buf.push_str("Max"),
-                OR_TYP => buf.push_str("Or"),
-                _ => panic!("Bad typ for Mon")
-            }
-            buf.push_str("["); buf.push_str(&tag.to_string()); buf.push_str("]");
-            buf.push_str("{");
-            let mut is_first = true;
-            for (n2,x2) in cs {
-                if is_first { is_first = false; }
-                else { buf.push_str(","); }
-                node_to_string(n2,buf);
-                buf.push_str(":");
-                buf.push_str(&x2.to_string());
-            }
-            buf.push_str("}");
-        }
-    }
-}
+mod parsing {
+    use crate::*;
 
-fn node_to_bin(n: &Node, buf: &mut Vec<u32>) {
-    match n {
-        Node::State(s) => {
-            buf.push(state_w(*s))
+    fn read_expect<'a>(inp: &'a [u8], chr: u8) -> &'a [u8] {
+        if inp.len() == 0 || inp[0] != chr {
+            panic!("Expecting {:?}, got {:?}.", chr as char, String::from_utf8(inp.to_vec()).unwrap());
         }
-        Node::Coll(typ,tag,ns) => {
-            buf.push(coll_w(*typ,*tag,ns.len() as u16));
-            for n2 in ns {
-                node_to_bin(&n2,buf)
-            }
-        }
-        Node::Mon(typ,tag,cs) => {
-            buf.push(coll_w(*typ,*tag,cs.len() as u16));
-            for (n2,x2) in cs {
-                node_to_bin(n2,buf);
-                buf.push(*x2 as u32);
-                buf.push((*x2 >> 32) as  u32);
-            }
-        }
+        return &inp[1..];
     }
-}
 
-fn peek_c(buf: &[char], i: &mut usize) -> Option<char> {
-    if *i >= buf.len() {
-        return None
-    }else{
-        let w = buf[*i];
-        return Some(w);
+    fn read_tag<'a>(inp: &'a [u8]) -> (u8, &'a [u8]) {
+        let inp = read_expect(inp, b'[');
+        let (tag,n) = lexical::parse_partial::<u8,_>(inp).expect("Expected a number in tag [_].");
+        (tag, read_expect(&inp[n..], b']'))
     }
-}
-fn get_c(buf: &[char], i: &mut usize) -> Option<char> {
-    if *i >= buf.len() {
-        return None
-    }else{
-        let w = buf[*i];
-        *i += 1;
-        return Some(w);
+
+    #[test]
+    fn test_read_tag() {
+        assert_eq!(read_tag("[123]abc".as_bytes()), (123, "abc".as_bytes()));
     }
-}
-fn parse_error<T>(buf: &[char], i: &mut usize, msg: &str) -> T {
-    let mut ind = String::from("");
-    for _ in 0..*i {
-        ind.push_str(" ");
-    }
-    ind.push_str("^");
-    panic!("Parse error: {} \nError occurred at position {} in:\n{}\n{}", msg, i, String::from_iter(buf), ind)
-}
-fn expect_str(buf: &[char], i: &mut usize, s: &str) {
-    for c in s.chars() {
-        match get_c(buf,i) {
-            None => parse_error(buf,i,&format!("Unexpected end of input while expecting {}.", s)),
-            Some(c2) => if c == c2 {} else { *i -= 1; parse_error(buf,i,&format!("Unexpected character while expecting {}.", s)) }
+
+    fn read_coll<'a>(inp: &'a [u8], typ: u8) -> (Node, &'a [u8]) {
+        let (tag, inp) = read_tag(inp);
+        let mut inp = read_expect(inp, b'{');
+        let mut nodes = vec![];
+        if inp.len() == 0 { panic!("Unexpected end of input at start of collection.") }
+        if inp[0] == b'}' { return (Node::Coll(typ, tag, nodes), &inp[1..]) }
+        loop {
+            let (node,inp2) = read_node(inp);
+            inp = inp2;
+            nodes.push(node);
+            if inp.len() == 0 { panic!("Unexpected end of input in collection.") }
+            if inp[0] == b'}' { return (Node::Coll(typ, tag, nodes), &inp[1..]) }
+            inp = read_expect(inp, b',');
         }
     }
-}
 
-fn parse_num(buf: &[char], i: &mut usize) -> u64 {
-    let mut num : u64 = 0;
-    loop {
-        match peek_c(buf,i) {
-            None => break,
-            Some(c) => {
-                match char::to_digit(c, 10) {
-                    Some(k) => { *i += 1; num = num*10 + (k as u64); }
-                    None => break
+    #[test]
+    fn test_read_coll() {
+        assert_eq!(read_coll("[123]{@12,@13,@14}abc".as_bytes(), LIST_TYP),
+                (Node::Coll(LIST_TYP, 123, vec![Node::State(12),Node::State(13),Node::State(14)]),"abc".as_bytes()));
+    }
+
+    fn read_mon<'a>(inp: &'a [u8], typ: u8) -> (Node, &'a [u8]) {
+        let (tag, inp) = read_tag(inp);
+        let mut inp = read_expect(inp, b'{');
+        let mut nodes = vec![];
+        if inp.len() == 0 { panic!("Unexpected end of input at start of monoid.") }
+        if inp[0] == b'}' { return (Node::Mon(typ, tag, nodes), &inp[1..]) }
+        loop {
+            let (node,inp2) = read_node(inp);
+            inp = read_expect(inp2, b':');
+            let (val,n) = lexical::parse_partial::<u64,_>(inp).expect("Expected a number after ':'.");
+            inp = &inp[n..];
+            nodes.push((node, val));
+            if inp.len() == 0 { panic!("Unexpected end of input in monoid.") }
+            if inp[0] == b'}' { return (Node::Mon(typ, tag, nodes), &inp[1..]) }
+            inp = read_expect(inp, b',');
+        }
+    }
+
+    #[test]
+    fn test_read_mon() {
+        assert_eq!(read_mon("[123]{@12:5,@13:6,@14:7}abc".as_bytes(), ADD_TYP),
+            (Node::Mon(ADD_TYP, 123, vec![(Node::State(12),5),(Node::State(13),6),(Node::State(14),7)]),"abc".as_bytes()));
+    }
+
+    pub fn read_node<'a>(inp: &'a [u8]) -> (Node, &'a [u8]) {
+        if inp.len() == 0 { panic!("Expected start of a node, but input is empty.") }
+        let chr = inp[0];
+        let orig = inp;
+        let inp = &inp[1..];
+        match chr {
+            b'@' => {
+                let (state,n) = lexical::parse_partial::<u32,_>(inp).expect("Expected a number after '@'.");
+                assert!(state <= u32::MAX >> 2);
+                (Node::State(state), &inp[n..])
+            },
+            b'L' => {
+                if inp.len() < 3 || inp[0..3] != [b'i', b's', b't'] {
+                    panic!("Expected \"List\", got {:?}", String::from_utf8(orig.to_vec()).unwrap());
                 }
+                return read_coll(&inp[3..], LIST_TYP);
+            },
+            b'S' => {
+                if inp.len() < 2 || inp[0..2] != [b'e', b't'] {
+                    panic!("Expected \"Set\" got {:?}", String::from_utf8(orig.to_vec()).unwrap());
+                }
+                return read_coll(&inp[2..], SET_TYP);
+            },
+            b'A' => {
+                if inp.len() < 2 || inp[0..2] != [b'd', b'd'] {
+                    panic!("Expected \"Add\" got {:?}", String::from_utf8(orig.to_vec()).unwrap());
+                }
+                return read_mon(&inp[2..], ADD_TYP);
+            },
+            b'O' => {
+                if inp.len() < 1 || inp[0..1] != [b'r'] {
+                    panic!("Expected \"Or\" got {:?}", String::from_utf8(orig.to_vec()).unwrap());
+                }
+                return read_mon(&inp[1..], OR_TYP);
+            },
+            b'M' => {
+                if inp.len() < 2 || inp[0..2] != [b'a', b'x'] {
+                    panic!("Expected \"Max\", got {:?}", String::from_utf8(orig.to_vec()).unwrap());
+                }
+                return read_mon(&inp[2..], MAX_TYP);
+            },
+            _ => { panic!("Expected start of a node, but got {:?}.", String::from_utf8(orig.to_vec()).unwrap()) }
+        }
+    }
+
+    #[test]
+    fn test_read_node() {
+        assert_eq!(read_node("List[123]{@12,@13,@14}abc".as_bytes()),
+            (Node::Coll(LIST_TYP, 123, vec![Node::State(12),Node::State(13),Node::State(14)]), "abc".as_bytes()));
+
+        assert_eq!(read_node("Set[123]{@12,@13,@14}abc".as_bytes()),
+            (Node::Coll(SET_TYP, 123, vec![Node::State(12),Node::State(13),Node::State(14)]), "abc".as_bytes()));
+
+        assert_eq!(read_node("Set[123]{}abc".as_bytes()),
+            (Node::Coll(SET_TYP, 123, vec![]), "abc".as_bytes()));
+
+        assert_eq!(read_node("Add[123]{@12:5,@13:6,@14:7}abc".as_bytes()),
+            (Node::Mon(ADD_TYP, 123, vec![(Node::State(12),5),(Node::State(13),6),(Node::State(14),7)]),"abc".as_bytes()));
+
+        assert_eq!(read_node("Or[123]{@12:5,@13:6,@14:7}abc".as_bytes()),
+            (Node::Mon(OR_TYP, 123, vec![(Node::State(12),5),(Node::State(13),6),(Node::State(14),7)]),"abc".as_bytes()));
+
+        assert_eq!(read_node("Max[123]{@12:5,@13:6,@14:7}abc".as_bytes()),
+            (Node::Mon(MAX_TYP, 123, vec![(Node::State(12),5),(Node::State(13),6),(Node::State(14),7)]),"abc".as_bytes()));
+
+        assert_eq!(read_node("Max[123]{}abc".as_bytes()),
+            (Node::Mon(MAX_TYP, 123, vec![]),"abc".as_bytes()));
+    }
+}
+
+impl Node {
+    fn from_ascii(inp: &[u8]) -> Self {
+        let (node,rest) = parsing::read_node(inp);
+        if rest.len() == 0 || rest == [b'\n'] {
+            return node
+        } else {
+            panic!("Did not parse everything on the line.")
+        }
+    }
+
+    fn to_ascii(self: &Self, w: &mut Vec<u8>) {
+        match self {
+            Node::State(state) => {
+                w.push(b'@');
+                w.extend(lexical::to_string(*state).as_bytes());
+            }
+            Node::Coll(typ, tag, nodes) => {
+                let typ_str = match *typ {
+                    LIST_TYP => "List[",
+                    SET_TYP => "Set[",
+                    _ => panic!("Bad typ.")
+                };
+                w.extend(typ_str.as_bytes());
+                w.extend(lexical::to_string(*tag).as_bytes());
+                w.extend([b']',b'{']);
+                for node in nodes {
+                    node.to_ascii(w);
+                    w.push(b',');
+                }
+                if nodes.len() > 0 { w.pop(); }
+                w.push(b'}');
+            }
+            Node::Mon(typ, tag, nodes) => {
+                let typ_str = match *typ {
+                    ADD_TYP => "Add[",
+                    OR_TYP => "Or[",
+                    MAX_TYP => "Max[",
+                    _ => panic!("Bad typ.")
+                };
+                w.extend(typ_str.as_bytes());
+                w.extend(lexical::to_string(*tag).as_bytes());
+                w.extend([b']',b'{']);
+                for (node,val) in nodes {
+                    node.to_ascii(w);
+                    w.push(b':');
+                    w.extend(lexical::to_string(*val).as_bytes());
+                    w.push(b',');
+                }
+                if nodes.len() > 0 { w.pop(); }
+                w.push(b'}');
             }
         }
     }
-    return num
-}
 
-fn parse_tag(buf: &[char], i: &mut usize) -> u8 {
-    expect_str(buf,i,"[");
-    let n = parse_num(buf,i);
-    if n > 255 {
-        return parse_error(buf,i,"Tag values must be in the range 0 - 255.");
-    }
-    expect_str(buf,i,"]");
-    return n as u8
-}
-
-fn parse_coll(buf: &[char], i: &mut usize) -> Vec<Node> {
-    expect_str(buf,i,"{");
-    let mut ns = vec![];
-    match peek_c(buf,i) {
-        Some('}') => { *i += 1; return ns }
-        _ => {}
-    }
-    loop {
-        ns.push(parse_node(buf,i));
-        match get_c(buf,i) {
-            Some('}') => return ns,
-            Some(',') => {},
-            Some(_) => parse_error(buf,i,"Unexpected character in collection."),
-            None => parse_error(buf,i,"Unexpected end of input."),
-        }
-    }
-}
-
-fn parse_mon(buf: &[char], i: &mut usize) -> Vec<(Node,u64)> {
-    expect_str(buf,i,"{");
-    let mut ns = vec![];
-    match peek_c(buf,i) {
-        Some('}') => { *i += 1; return ns }
-        _ => {}
-    }
-    loop {
-        let n = parse_node(buf,i);
-        expect_str(buf,i,":");
-        let x = parse_num(buf,i);
-        ns.push((n,x));
-        match get_c(buf,i) {
-            Some('}') => return ns,
-            Some(',') => {},
-            Some(_) => parse_error(buf,i,"Unexpected character in monoid collection."),
-            None => parse_error(buf,i,"Unexpected end of input."),
-        }
-    }
-}
-
-fn parse_node(buf: &[char], i: &mut usize) -> Node {
-    match get_c(buf,i) {
-        Some('@') => {
-            let n = parse_num(buf,i);
-            if n > 2147483647 { parse_error(buf,i,"State numbers must be in the range 0 - 2147483647.") }
-            Node::State(n as u32)
-        },
-        Some('L') => {
-            expect_str(buf,i,"ist");
-            Node::Coll(LIST_TYP, parse_tag(buf,i), parse_coll(buf,i))
-        }
-        Some('S') => {
-            expect_str(buf,i,"et");
-            Node::Coll(SET_TYP, parse_tag(buf,i), parse_coll(buf,i))
-        },
-        Some('A') => {
-            expect_str(buf,i,"dd");
-            Node::Mon(ADD_TYP, parse_tag(buf,i), parse_mon(buf,i))
-        },
-        Some('M') => {
-            expect_str(buf,i,"ax");
-            Node::Mon(MAX_TYP, parse_tag(buf,i), parse_mon(buf,i))
-        },
-        Some('O') => {
-            expect_str(buf,i,"r");
-            Node::Mon(OR_TYP, parse_tag(buf,i), parse_mon(buf,i))
-        },
-        _ => {
-            parse_error(buf,i, "Expected the start of a node.")
-        }
-    }
-}
-fn parse_node_string(input: &str) -> Node {
-    let mut i:usize = 0;
-    let chrs = input.chars().collect::<Vec<_>>();
-    let n = parse_node(&chrs, &mut i);
-    if i+1 < chrs.len() {
-        panic!("Did not parse whole input.");
-    }
-    return n
-}
-
-fn get_w(buf: &[u32], i: &mut usize) -> u32 {
-    if *i >= buf.len() {
-        panic!("Trying to parse past end of buffer.")
-    }
-    let w = buf[*i];
-    *i += 1;
-    return w;
-}
-fn parse_node_bin(buf: &[u32], i: &mut usize) -> Node {
-    let w = get_w(buf,i);
-    if is_state(w) {
-        return Node::State(w)
-    } else {
-        let typ = get_typ(w);
-        let tag = get_tag(w);
-        let len = get_len(w);
-        if typ == LIST_TYP || typ == SET_TYP {
-            let mut ns:Vec<Node> = vec![];
-            for _ in 0..len {
-                ns.push(parse_node_bin(buf,i));
+    fn write(self: &Self, w: &mut CWriter) {
+        match self {
+            Node::State(state) => w.write_node_noncompressed(put_state(*state)),
+            Node::Coll(typ, tag, nodes) => {
+                w.write_node(put_header(encode_header(*typ, *tag, nodes.len() as u16)));
+                for node in nodes { node.write(w) }
             }
-            return Node::Coll(typ, tag, ns)
-        }
-        else if typ == ADD_TYP || typ == MAX_TYP || typ == OR_TYP {
-            let mut ns = vec![];
-            for _ in 0..len {
-                let n = parse_node_bin(buf,i);
-                let x1 = get_w(buf,i);
-                let x2 = get_w(buf,i);
-                ns.push((n, x1 as u64 | ((x2 as u64) << 32)));
+            Node::Mon(typ, tag, nodes) => {
+                w.write_node(put_header(encode_header(*typ, *tag, nodes.len() as u16)));
+                for (node, val) in nodes { node.write(w); w.write_value(*val) }
             }
-            return Node::Mon(typ, tag, ns)
-        } else { panic!("Wrong typ in binary rep.") }
+        }
+    }
+
+    unsafe fn read(r: &CReader, p: &mut *const u8) -> Self {
+        let w = r.read_node_mut(p);
+        if is_state(w) {
+            Node::State(get_state(w))
+        } else {
+            let (typ, tag, len) = decode_header(get_header(w));
+            match typ {
+                LIST_TYP| SET_TYP => {
+                    let nodes = (0..len).map(|_| { Node::read(r, p) }).collect();
+                    Node::Coll(typ, tag, nodes)
+                },
+                ADD_TYP| OR_TYP| MAX_TYP => {
+                    let nodes = (0..len).map(|_| {
+                        let node = Node::read(r, p);
+                        let val = r.read_value_mut(p);
+                        (node,val)
+                    }).collect();
+                    Node::Mon(typ, tag, nodes)
+                }
+                _ => { panic!("Unknown typ.") }
+            }
+        }
     }
 }
-
 
 #[test]
-fn test_node_to_string(){
-    let n = Node::Coll(1,2,
-        vec![Node::State(32),Node::State(43),
-        Node::Mon(ADD_TYP,4,vec![(Node::State(87),54),(Node::State(87),54)])]);
-    let mut out: String = String::from("");
-    node_to_string(n, &mut out);
-    assert_eq!(out, "Set[2]{@32,@43,Add[4]{@87:54,@87:54}}")
+fn test_node_read_write() {
+    // Test conversion from & to ascii
+    let node_str = "Max[123]{@12:1,Set[123]{@12,@13,@14}:2,Max[123]{@12:3,@13:4,@14:5}:6,Set[12]{}:7}";
+    let node = Node::from_ascii(node_str.as_bytes());
+    let mut out = vec![];
+    node.to_ascii(&mut out);
+    assert_eq!(String::from_utf8(out).unwrap(), node_str);
+
+    // Test conversion to & from binary
+    let mut w = CWriter::new();
+    node.write(&mut w);
+    let (data,r) = w.finish();
+    unsafe {
+        let node2 = Node::read(&r, &mut data.as_ptr());
+        assert_eq!(node, node2);
+    }
 }
 
-#[test]
-fn test_parse_node() {
-    fn test_parse_node12(inp : &str, expected: &str) {
-        // Parse inp then convert back to string and check if they're equal
-        let n = parse_node_string(inp);
-        let mut out: String = String::from("");
-        node_to_string(n, &mut out);
-        assert_eq!(out, expected);
-
-        // Parse inp then convert to binary then parse binary then back
-        // to string and check if they're equal
-        let n = parse_node_string(inp);
-        let mut outb: Vec<u32> = vec![];
-        node_to_bin(&n,&mut outb);
-        let mut i = 0;
-        let n2 = parse_node_bin(&outb, &mut i);
-        assert_eq!(i,outb.len());
-
-        let mut out: String = String::from("");
-        node_to_string(n2, &mut out);
-        assert_eq!(out, expected);
+fn read_boa_txt<P>(filename: P) -> (Vec<u8>,CReader)
+where P: AsRef<Path>, {
+    let file = File::open(&filename).
+        expect(&format!("Couldn't open file {:?}", filename.as_ref().display().to_string()));
+    let mut reader = BufReader::new(file);
+    let mut line = vec![];
+    let mut w = CWriter::new();
+    while 0 < reader.read_until(b'\n', &mut line).expect("Failure while reading file.") {
+        let node = Node::from_ascii(&line);
+        node.write(&mut w);
+        line.clear();
     }
-    fn test_parse_node1(inp : &str) {
-        test_parse_node12(inp,inp)
-    }
-    test_parse_node1("Set[2]{@32,@43,Add[4]{@87:54,@87:54}}");
-    test_parse_node1("List[2]{@32,@43,Add[4]{@87:54,@87:54}}");
-    test_parse_node1("List[2]{@32,@43,Add[4]{@87:54,@87:54}}");
-    test_parse_node1("List[2]{@32,@43,Max[4]{@87:54,@87:54}}");
-    test_parse_node1("List[2]{@32,@43,Or[4]{@87:54,@87:54}}");
-    test_parse_node1("List[2]{}");
-    test_parse_node1("@345");
+    w.finish()
 }
 
 
-
-// Partition refinement
-// ====================
-
-type Loc = usize;
-type State = u32;
+//======================//
+// Partition refinement //
+//======================//
 
 struct Coalg {
-    data: Vec<u32>, // binary representation of the coalgebra
-    locs: Vec<Loc>, // locs[i] gives the index into data[loc[i]] where the i-th state starts
+    data: Vec<u8>, // binary representation of the coalgebra
+    reader: CReader,
+    locs: Vec<*const u8>, // gives the location in data where the i-th state starts
     backrefs: Vec<u32>, // buffer of backrefs
     backrefs_locs: Vec<u32> // backrefs_locs[i] gives the index into backrefs[backrefs_locs[i]] where the backrefs of the i-th state start
 }
 
 impl Coalg {
-    fn new(data: Vec<u32>) -> Coalg {
+    fn new(data: Vec<u8>, r: CReader) -> Coalg {
         // Iterate over one state starting at data[loc], calling f(i) on each state ref @i in the state.
-        #[inline]
-        fn iter<F>(data: &[u32], loc: &mut usize, f : &mut F)
-        where F : FnMut(State) -> () {
-            let w = data[*loc];
+        unsafe fn iter<F>(p: &mut *const u8, r: &CReader, f : &mut F)
+        where F : FnMut(u32) -> () {
+            let w = r.read_node_mut( p);
             if is_state(w) {
-                f(w);
-                *loc += 1;
+                f(get_state(w));
             } else {
-                let typ = get_typ(w);
-                let len = get_len(w);
-                *loc += 1;
+                let (typ,_tag,len) = decode_header(get_header(w));
                 match typ {
                     LIST_TYP|SET_TYP => {
                         for _ in 0..len {
-                            iter(data,loc,f)
+                            iter(p,r,f)
                         }
                     },
                     ADD_TYP|MAX_TYP|OR_TYP => {
                         for _ in 0..len {
-                            iter(data,loc,f);
-                            *loc += 2;
+                            iter(p,r,f);
+                            r.read_value_mut( p);
                         }
                     },
                     _ => {
@@ -430,47 +527,50 @@ impl Coalg {
         let mut locs = vec![];
         let mut backrefs_locs: Vec<u32> = vec![];
 
-        // Compute number of backrefs to state i in backrefs_locs[i]
-        let mut loc = 0;
-        let mut state_num:u32 = 0;
-        while loc < data.len() {
-            locs.push(loc);
-            iter(&data, &mut loc, &mut |w| {
-                while w as usize >= backrefs_locs.len() { backrefs_locs.push(0) }
-                backrefs_locs[w as usize] += 1;
-            });
-            state_num += 1;
-        }
-        while backrefs_locs.len() <= state_num as usize { backrefs_locs.push(0) }
+        unsafe {
+            // Compute number of backrefs to state i in backrefs_locs[i]
+            // Also computes locs[i] pointers to beginning of state i
+            let mut p = data.as_ptr();
+            let mut state_num:u32 = 0;
+            while !CReader::is_at_end(&data,p) {
+                locs.push(p);
+                iter(&mut p, &r, &mut |w| {
+                    while w as usize >= backrefs_locs.len() { backrefs_locs.push(0) }
+                    backrefs_locs[w as usize] += 1;
+                });
+                state_num += 1;
+            }
+            while backrefs_locs.len() <= state_num as usize { backrefs_locs.push(0) }
 
-        // Compute cumulative sum
-        let mut total_backrefs = 0;
-        for i in 0..backrefs_locs.len() {
-            total_backrefs += backrefs_locs[i];
-            backrefs_locs[i] = total_backrefs;
-        }
+            // Compute cumulative sum
+            let mut total_backrefs = 0;
+            for i in 0..backrefs_locs.len() {
+                total_backrefs += backrefs_locs[i];
+                backrefs_locs[i] = total_backrefs;
+            }
 
-        let mut backrefs = vec![0;total_backrefs as usize];
+            let mut backrefs = vec![0;total_backrefs as usize];
 
-        // Fill in the actual backrefs
-        loc = 0;
-        let mut state_num:u32 = 0;
-        while loc < data.len() {
-            iter(&data, &mut loc, &mut |w| {
-                // state_num refers to state w
-                backrefs_locs[w as usize] -= 1;
-                backrefs[backrefs_locs[w as usize] as usize] = state_num;
-            });
-            state_num += 1;
-        }
+            // Fill in the actual backrefs
+            let mut p = data.as_ptr();
+            let mut state_num:u32 = 0;
+            while !CReader::is_at_end(&data,p) {
+                iter(&mut p, &r, &mut |w| {
+                    // state_num refers to state w
+                    backrefs_locs[w as usize] -= 1;
+                    backrefs[backrefs_locs[w as usize] as usize] = state_num;
+                });
+                state_num += 1;
+            }
+            debug_assert_eq!(backrefs_locs.len(), state_num as usize + 1);
 
-        debug_assert_eq!(backrefs_locs.len(), state_num as usize + 1);
-
-        Coalg {
-            data: data,
-            locs: locs,
-            backrefs: backrefs,
-            backrefs_locs: backrefs_locs
+            Coalg {
+                data: data,
+                reader: r,
+                locs: locs,
+                backrefs: backrefs,
+                backrefs_locs: backrefs_locs
+            }
         }
     }
 
@@ -497,7 +597,7 @@ impl Coalg {
 
 #[test]
 fn test_new_coalg() {
-    let data = read_boa_txt("tests/test1.boa.txt");
+    let (data,r) = read_boa_txt("tests/test1.boa.txt");
     // 0: List[0]{@0,@1}
     // 1: List[0]{@1,@1}
     // 2: List[1]{@0,@0}
@@ -506,193 +606,193 @@ fn test_new_coalg() {
     // 5: Add[0]{@0:1,@1:1}
     // 6: Add[0]{@0:2}
     // 7: Add[0]{@0:2,@1:1}
-    let coa = Coalg::new(data);
+    let coa = Coalg::new(data,r);
     assert_eq!(coa.num_states(), 8);
     assert_eq!(&coa.backrefs, &vec![7,6,5,3,3,2,2,0,  7,5,1,1,0,  4,  4]); // 0,2,2,3,3,5,6,7,  0,1,1,5,7,  4,  4
     assert_eq!(&coa.backrefs_locs, &vec![0,8,13,13,14,15,15,15,15]); // note that the states 5,6,7 have no corresponding entry because they are never referred to and are at the end
     assert_eq!(&coa.state_backrefs(0), &vec![7,6,5,3,3,2,2,0]);
 }
 
-type ID = u32; // represents canonical ID of a state or sub-node of a state
+type ID = u32; // represents canonical ID of a state or sub-node of a state, refers to a partition number
 
-struct Tables {
-    last_id : ID,
-    coll_table : HMap<Vec<ID>, ID>,
-    mon_table : HMap<Vec<(ID,u64)>, ID>,
-}
+// struct Tables {
+//     last_id : ID,
+//     coll_table : HMap<Vec<ID>, ID>,
+//     mon_table : HMap<Vec<(ID,u64)>, ID>,
+// }
 
-fn insert_or_op<A,F>(xs: &mut Vec<(A,u64)>, key: A, val: u64, op : F)
-where F : Fn(u64,u64) -> u64, A:Ord {
-    let r = xs.binary_search_by(|(key2,_)| key2.cmp(&key));
-    match r {
-        Ok(i) => {
-            xs[i].1 = op(xs[i].1, val);
-        }
-        Err(i) => {
-            xs.insert(i,(key,val));
-        }
-    }
-}
+// fn insert_or_op<A,F>(xs: &mut Vec<(A,u64)>, key: A, val: u64, op : F)
+// where F : Fn(u64,u64) -> u64, A:Ord {
+//     let r = xs.binary_search_by(|(key2,_)| key2.cmp(&key));
+//     match r {
+//         Ok(i) => {
+//             xs[i].1 = op(xs[i].1, val);
+//         }
+//         Err(i) => {
+//             xs.insert(i,(key,val));
+//         }
+//     }
+// }
 
-#[test]
-fn test_insert_or_op() {
-    let mut xs = vec![];
-    insert_or_op(&mut xs, 0, 1, |a,b| a+b);
-    assert_eq!(xs, vec![(0,1)]);
-    insert_or_op(&mut xs, 0, 1, |a,b| a+b);
-    assert_eq!(xs, vec![(0,2)]);
-    insert_or_op(&mut xs, 3, 1, |a,b| a+b);
-    assert_eq!(xs, vec![(0,2),(3,1)]);
-    insert_or_op(&mut xs, 2, 1, |a,b| a+b);
-    assert_eq!(xs, vec![(0,2),(2,1),(3,1)]);
-    insert_or_op(&mut xs, 2, 1, |a,b| a+b);
-    assert_eq!(xs, vec![(0,2),(2,2),(3,1)]);
-}
+// #[test]
+// fn test_insert_or_op() {
+//     let mut xs = vec![];
+//     insert_or_op(&mut xs, 0, 1, |a,b| a+b);
+//     assert_eq!(xs, vec![(0,1)]);
+//     insert_or_op(&mut xs, 0, 1, |a,b| a+b);
+//     assert_eq!(xs, vec![(0,2)]);
+//     insert_or_op(&mut xs, 3, 1, |a,b| a+b);
+//     assert_eq!(xs, vec![(0,2),(3,1)]);
+//     insert_or_op(&mut xs, 2, 1, |a,b| a+b);
+//     assert_eq!(xs, vec![(0,2),(2,1),(3,1)]);
+//     insert_or_op(&mut xs, 2, 1, |a,b| a+b);
+//     assert_eq!(xs, vec![(0,2),(2,2),(3,1)]);
+// }
 
-fn canonicalize(data : &[u32], ids: &[ID], loc : &mut Loc, tables : &mut Tables) -> ID {
-    let w = data[*loc];
-    if is_state(w) {
-        *loc += 1;
-        return ids[w as Loc]
-    } else {
-        let typ = get_typ(w);
-        let tag = get_tag(w);
-        let len = get_len(w);
-        *loc += 1;
-        match typ {
-            LIST_TYP => {
-                let mut children = vec![tag as ID];
-                for _ in 0..len {
-                    children.push(canonicalize(data, ids, loc,tables));
-                }
-                if tables.coll_table.contains_key(&children) {
-                    return tables.coll_table[&children];
-                } else {
-                    let id = tables.last_id;
-                    tables.last_id += 1;
-                    tables.coll_table.insert(children, id);
-                    return id
-                }
-            },
-            SET_TYP => {
-                let mut children = vec![];
-                for _ in 0..len {
-                    children.push(canonicalize(data, ids, loc, tables));
-                }
-                children.sort();
-                children.dedup();
-                children.push(tag as ID);
-                if tables.coll_table.contains_key(&children) {
-                    return tables.coll_table[&children];
-                } else {
-                    let id = tables.last_id;
-                    tables.last_id += 1;
-                    tables.coll_table.insert(children, id);
-                    return id
-                }
-            },
-            ADD_TYP => {
-                let mut repr = vec![];
-                for _ in 0..len {
-                    let n = canonicalize(data, ids, loc, tables);
-                    let x1 = data[*loc];
-                    let x2 = data[*loc+1];
-                    *loc += 2;
-                    let w = x1 as u64 | ((x2 as u64) << 32);
-                    insert_or_op(&mut repr, n, w, |a,b| a+b);
-                }
-                repr.push((tag as ID,0));
-                if tables.mon_table.contains_key(&repr) {
-                    return tables.mon_table[&repr];
-                } else {
-                    let id = tables.last_id;
-                    tables.last_id += 1;
-                    tables.mon_table.insert(repr, id);
-                    return id
-                }
-            },
-            MAX_TYP => {
-                let mut repr = vec![];
-                for _ in 0..len {
-                    let n = canonicalize(data, ids, loc, tables);
-                    let x1 = data[*loc];
-                    let x2 = data[*loc+1];
-                    *loc += 2;
-                    let w = x1 as u64 | ((x2 as u64) << 32);
-                    insert_or_op(&mut repr, n, w, |a,b| max(a,b));
-                }
-                repr.push((tag as ID,0));
-                if tables.mon_table.contains_key(&repr) {
-                    return tables.mon_table[&repr];
-                } else {
-                    let id = tables.last_id;
-                    tables.last_id += 1;
-                    tables.mon_table.insert(repr, id);
-                    return id
-                }
-            },
-            OR_TYP => {
-                let mut repr = vec![];
-                for _ in 0..len {
-                    let n = canonicalize(data, ids, loc, tables);
-                    let x1 = data[*loc];
-                    let x2 = data[*loc+1];
-                    *loc += 2;
-                    let w = x1 as u64 | ((x2 as u64) << 32);
-                    insert_or_op(&mut repr, n, w, |a,b| a|b);
-                }
-                repr.push((tag as ID,0));
-                if tables.mon_table.contains_key(&repr) {
-                    return tables.mon_table[&repr];
-                } else {
-                    let id = tables.last_id;
-                    tables.last_id += 1;
-                    tables.mon_table.insert(repr, id);
-                    return id
-                }
-            },
-            _ => {
-                panic!("Unknown typ.")
-            }
-        }
-    }
-}
+// fn canonicalize(data : &[u32], ids: &[ID], loc : &mut Loc, tables : &mut Tables) -> ID {
+//     let w = data[*loc];
+//     if is_state(w) {
+//         *loc += 1;
+//         return ids[w as Loc]
+//     } else {
+//         let typ = get_typ(w);
+//         let tag = get_tag(w);
+//         let len = get_len(w);
+//         *loc += 1;
+//         match typ {
+//             LIST_TYP => {
+//                 let mut children = vec![tag as ID];
+//                 for _ in 0..len {
+//                     children.push(canonicalize(data, ids, loc,tables));
+//                 }
+//                 if tables.coll_table.contains_key(&children) {
+//                     return tables.coll_table[&children];
+//                 } else {
+//                     let id = tables.last_id;
+//                     tables.last_id += 1;
+//                     tables.coll_table.insert(children, id);
+//                     return id
+//                 }
+//             },
+//             SET_TYP => {
+//                 let mut children = vec![];
+//                 for _ in 0..len {
+//                     children.push(canonicalize(data, ids, loc, tables));
+//                 }
+//                 children.sort();
+//                 children.dedup();
+//                 children.push(tag as ID);
+//                 if tables.coll_table.contains_key(&children) {
+//                     return tables.coll_table[&children];
+//                 } else {
+//                     let id = tables.last_id;
+//                     tables.last_id += 1;
+//                     tables.coll_table.insert(children, id);
+//                     return id
+//                 }
+//             },
+//             ADD_TYP => {
+//                 let mut repr = vec![];
+//                 for _ in 0..len {
+//                     let n = canonicalize(data, ids, loc, tables);
+//                     let x1 = data[*loc];
+//                     let x2 = data[*loc+1];
+//                     *loc += 2;
+//                     let w = x1 as u64 | ((x2 as u64) << 32);
+//                     insert_or_op(&mut repr, n, w, |a,b| a+b);
+//                 }
+//                 repr.push((tag as ID,0));
+//                 if tables.mon_table.contains_key(&repr) {
+//                     return tables.mon_table[&repr];
+//                 } else {
+//                     let id = tables.last_id;
+//                     tables.last_id += 1;
+//                     tables.mon_table.insert(repr, id);
+//                     return id
+//                 }
+//             },
+//             MAX_TYP => {
+//                 let mut repr = vec![];
+//                 for _ in 0..len {
+//                     let n = canonicalize(data, ids, loc, tables);
+//                     let x1 = data[*loc];
+//                     let x2 = data[*loc+1];
+//                     *loc += 2;
+//                     let w = x1 as u64 | ((x2 as u64) << 32);
+//                     insert_or_op(&mut repr, n, w, |a,b| max(a,b));
+//                 }
+//                 repr.push((tag as ID,0));
+//                 if tables.mon_table.contains_key(&repr) {
+//                     return tables.mon_table[&repr];
+//                 } else {
+//                     let id = tables.last_id;
+//                     tables.last_id += 1;
+//                     tables.mon_table.insert(repr, id);
+//                     return id
+//                 }
+//             },
+//             OR_TYP => {
+//                 let mut repr = vec![];
+//                 for _ in 0..len {
+//                     let n = canonicalize(data, ids, loc, tables);
+//                     let x1 = data[*loc];
+//                     let x2 = data[*loc+1];
+//                     *loc += 2;
+//                     let w = x1 as u64 | ((x2 as u64) << 32);
+//                     insert_or_op(&mut repr, n, w, |a,b| a|b);
+//                 }
+//                 repr.push((tag as ID,0));
+//                 if tables.mon_table.contains_key(&repr) {
+//                     return tables.mon_table[&repr];
+//                 } else {
+//                     let id = tables.last_id;
+//                     tables.last_id += 1;
+//                     tables.mon_table.insert(repr, id);
+//                     return id
+//                 }
+//             },
+//             _ => {
+//                 panic!("Unknown typ.")
+//             }
+//         }
+//     }
+// }
 
-#[test]
-fn canonicalize_test () {
-    let data = read_boa_txt("tests/test1.boa.txt");
-    let mut tables = Tables {
-        last_id: 0,
-        coll_table: HMap::default(),
-        mon_table: HMap::default()
-    };
-    let ids = vec![0,0,0,0];
-    let mut loc = 0;
-    let canon_id1 = canonicalize(&data, &ids, &mut loc, &mut tables);
-    let canon_id2 = canonicalize(&data, &ids, &mut loc, &mut tables);
-    let canon_id3 = canonicalize(&data, &ids, &mut loc, &mut tables);
-    let canon_id4 = canonicalize(&data, &ids, &mut loc, &mut tables);
-    assert_eq!(canon_id1, 0);
-    assert_eq!(canon_id2, 0);
-    assert_eq!(canon_id3, 1);
-    assert_eq!(canon_id4, 1);
-}
+// #[test]
+// fn canonicalize_test () {
+//     let data = read_boa_txt("tests/test1.boa.txt");
+//     let mut tables = Tables {
+//         last_id: 0,
+//         coll_table: HMap::default(),
+//         mon_table: HMap::default()
+//     };
+//     let ids = vec![0,0,0,0];
+//     let mut loc = 0;
+//     let canon_id1 = canonicalize(&data, &ids, &mut loc, &mut tables);
+//     let canon_id2 = canonicalize(&data, &ids, &mut loc, &mut tables);
+//     let canon_id3 = canonicalize(&data, &ids, &mut loc, &mut tables);
+//     let canon_id4 = canonicalize(&data, &ids, &mut loc, &mut tables);
+//     assert_eq!(canon_id1, 0);
+//     assert_eq!(canon_id2, 0);
+//     assert_eq!(canon_id3, 1);
+//     assert_eq!(canon_id4, 1);
+// }
 
-// Returns vector of new IDs for each state in states
-// IDs are labeled 0 to n
-fn repartition(coa : &Coalg, states: &[State], ids: &[ID]) -> Vec<ID> {
-    let mut tables = Tables {
-        last_id: 0,
-        coll_table: HMap::default(),
-        mon_table: HMap::default()
-    };
-    let mut new_ids_raw = vec![];
-    for &state in states {
-        let mut loc_mut = coa.locs[state as usize];
-        new_ids_raw.push(canonicalize(&coa.data, ids, &mut loc_mut, &mut tables));
-    }
-    return renumber(&new_ids_raw);
-}
+// // Returns vector of new IDs for each state in states
+// // IDs are labeled 0 to n
+// fn repartition(coa : &Coalg, states: &[State], ids: &[ID]) -> Vec<ID> {
+//     let mut tables = Tables {
+//         last_id: 0,
+//         coll_table: HMap::default(),
+//         mon_table: HMap::default()
+//     };
+//     let mut new_ids_raw = vec![];
+//     for &state in states {
+//         let mut loc_mut = coa.locs[state as usize];
+//         new_ids_raw.push(canonicalize(&coa.data, ids, &mut loc_mut, &mut tables));
+//     }
+//     return renumber(&new_ids_raw);
+// }
 
 fn hash_with_op<A,F,H>(repr: &mut [(A,u64)], hasher: &mut H, op: F)
 where F : Fn(u64,u64) -> u64, A:Ord+Copy+Hash, H:Hasher {
@@ -713,123 +813,117 @@ where F : Fn(u64,u64) -> u64, A:Ord+Copy+Hash, H:Hasher {
     }
 }
 
-fn canonicalize_inexact_node<'a>(mut data : &'a [u32], ids: &[ID], w: u32) -> (u64, &'a [u32]) {
-    let typ = get_typ(w);
-    let tag = get_tag(w);
-    let len = get_len(w);
+// fn canonicalize_inexact_node<'a>(mut data : &'a [u32], ids: &[ID], w: u32) -> (u64, &'a [u32]) {
+//     let typ = get_typ(w);
+//     let tag = get_tag(w);
+//     let len = get_len(w);
+//     let mut hasher = new_hasher();
+//     tag.hash(&mut hasher);
+//     match typ {
+//         LIST_TYP => {
+//             for _ in 0..len {
+//                 let (sig, rest) = canonicalize_inexact(data, ids);
+//                 sig.hash(&mut hasher);
+//                 data = rest;
+//             }
+//         },
+//         SET_TYP => {
+//             let mut repr: Vec<u64> = (0..len).map(|_| {
+//                 let (sig, rest) = canonicalize_inexact(data, ids);
+//                 data = rest; sig
+//             }).collect();
+//             repr.sort_unstable();
+//             repr.dedup();
+//             repr.hash(&mut hasher);
+//             // for &sig in repr.iter().dedup() { sig.hash(&mut hasher); }
+//         },
+//         ADD_TYP => {
+//             let mut repr: Vec<(u64,u64)> = (0..len).map(|_| {
+//                 let (sig, rest) = canonicalize_inexact(data, ids);
+//                 let x1 = rest[0];
+//                 let x2 = rest[1];
+//                 data = &rest[2..];
+//                 let w = x1 as u64 | ((x2 as u64) << 32);
+//                 (sig,w)
+//             }).collect();
+//             hash_with_op(&mut repr, &mut hasher, |a,b| a+b);
+//         },
+//         MAX_TYP => {
+//             let mut repr: Vec<(u64,u64)> = (0..len).map(|_| {
+//                 let (sig, rest) = canonicalize_inexact(data, ids);
+//                 let x1 = rest[0];
+//                 let x2 = rest[1];
+//                 data = &rest[2..];
+//                 let w = x1 as u64 | ((x2 as u64) << 32);
+//                 (sig,w)
+//             }).collect();
+//             hash_with_op(&mut repr, &mut hasher, |a,b| max(a,b));
+//         },
+//         OR_TYP => {
+//             let mut repr: Vec<(u64,u64)> = (0..len).map(|_| {
+//                 let (sig, rest) = canonicalize_inexact(data, ids);
+//                 let x1 = rest[0];
+//                 let x2 = rest[1];
+//                 data = &rest[2..];
+//                 let w = x1 as u64 | ((x2 as u64) << 32);
+//                 (sig,w)
+//             }).collect();
+//             hash_with_op(&mut repr, &mut hasher, |a,b| a|b);
+//         },
+//         _ => {
+//             panic!("Unknown typ.")
+//         }
+//     }
+//     return (hasher.finish(), data);
+// }
+
+// #[inline]
+// fn canonicalize_inexact<'a>(data : &'a [u32], ids: &[ID]) -> (u64, &'a [u32]) {
+//     let w = data[0];
+//     let data = &data[1..];
+//     if is_state(w) {
+//         return (ids[w as Loc] as u64, data);
+//     } else {
+//         return canonicalize_inexact_node(data, ids, w);
+//     }
+// }
+
+// fn repartition_inexact(coa : &Coalg, states: &[State], ids: &[ID]) -> Vec<u64> {
+//     let mut sigs = vec![];
+//     sigs.reserve(states.len());
+//     for &state in states {
+//         let loc = coa.locs[state as usize];
+//         let (sig,_rest) = canonicalize_inexact(&coa.data[loc..], ids);
+//         sigs.push(sig);
+//     }
+//     return sigs;
+// }
+
+unsafe fn canonicalize_inexact_node_unsafe<'a>(mut p : *const u8, r: &CReader, ids: &[ID], w: u32) -> (u64, *const u8) {
+    let (typ,tag,len) = decode_header(w);
     let mut hasher = new_hasher();
-    tag.hash(&mut hasher);
+    (typ,tag).hash(&mut hasher);
     match typ {
         LIST_TYP => {
             for _ in 0..len {
-                let (sig, rest) = canonicalize_inexact(data, ids);
+                let (sig, rest) = canonicalize_inexact_unsafe(p, r, ids);
                 sig.hash(&mut hasher);
-                data = rest;
+                p = rest;
             }
         },
         SET_TYP => {
             let mut repr: Vec<u64> = (0..len).map(|_| {
-                let (sig, rest) = canonicalize_inexact(data, ids);
-                data = rest; sig
+                let (sig, rest) = canonicalize_inexact_unsafe(p, r, ids);
+                p = rest; sig
             }).collect();
             repr.sort_unstable();
-            repr.dedup();
-            repr.hash(&mut hasher);
-            // for &sig in repr.iter().dedup() { sig.hash(&mut hasher); }
-        },
-        ADD_TYP => {
-            let mut repr: Vec<(u64,u64)> = (0..len).map(|_| {
-                let (sig, rest) = canonicalize_inexact(data, ids);
-                let x1 = rest[0];
-                let x2 = rest[1];
-                data = &rest[2..];
-                let w = x1 as u64 | ((x2 as u64) << 32);
-                (sig,w)
-            }).collect();
-            hash_with_op(&mut repr, &mut hasher, |a,b| a+b);
-        },
-        MAX_TYP => {
-            let mut repr: Vec<(u64,u64)> = (0..len).map(|_| {
-                let (sig, rest) = canonicalize_inexact(data, ids);
-                let x1 = rest[0];
-                let x2 = rest[1];
-                data = &rest[2..];
-                let w = x1 as u64 | ((x2 as u64) << 32);
-                (sig,w)
-            }).collect();
-            hash_with_op(&mut repr, &mut hasher, |a,b| max(a,b));
-        },
-        OR_TYP => {
-            let mut repr: Vec<(u64,u64)> = (0..len).map(|_| {
-                let (sig, rest) = canonicalize_inexact(data, ids);
-                let x1 = rest[0];
-                let x2 = rest[1];
-                data = &rest[2..];
-                let w = x1 as u64 | ((x2 as u64) << 32);
-                (sig,w)
-            }).collect();
-            hash_with_op(&mut repr, &mut hasher, |a,b| a|b);
-        },
-        _ => {
-            panic!("Unknown typ.")
-        }
-    }
-    return (hasher.finish(), data);
-}
-
-#[inline]
-fn canonicalize_inexact<'a>(data : &'a [u32], ids: &[ID]) -> (u64, &'a [u32]) {
-    let w = data[0];
-    let data = &data[1..];
-    if is_state(w) {
-        return (ids[w as Loc] as u64, data);
-    } else {
-        return canonicalize_inexact_node(data, ids, w);
-    }
-}
-
-fn repartition_inexact(coa : &Coalg, states: &[State], ids: &[ID]) -> Vec<u64> {
-    let mut sigs = vec![];
-    sigs.reserve(states.len());
-    for &state in states {
-        let loc = coa.locs[state as usize];
-        let (sig,_rest) = canonicalize_inexact(&coa.data[loc..], ids);
-        sigs.push(sig);
-    }
-    return sigs;
-}
-
-unsafe fn canonicalize_inexact_node_unsafe<'a>(mut data : *const u32, ids: &[ID], w: u32) -> (u64, *const u32) {
-    let typ = get_typ(w);
-    let tag = get_tag(w);
-    let len = get_len(w);
-    let mut hasher = new_hasher();
-    tag.hash(&mut hasher);
-    match typ {
-        LIST_TYP => {
-            for _ in 0..len {
-                let (sig, rest) = canonicalize_inexact_unsafe(data, ids);
-                sig.hash(&mut hasher);
-                data = rest;
-            }
-        },
-        SET_TYP => {
-            let mut repr: Vec<u64> = (0..len).map(|_| {
-                let (sig, rest) = canonicalize_inexact_unsafe(data, ids);
-                data = rest; sig
-            }).collect();
-            repr.sort_unstable();
-            repr.dedup();
-            repr.hash(&mut hasher);
-            // for &sig in repr.iter().dedup() { sig.hash(&mut hasher); }
+            for &sig in repr.iter().dedup() { sig.hash(&mut hasher); }
         },
         ADD_TYP|MAX_TYP|OR_TYP => {
             let mut repr: Vec<(u64,u64)> = (0..len).map(|_| {
-                let (sig, rest) = canonicalize_inexact_unsafe(data, ids);
-                let x1 = *rest;
-                let x2 = *rest.add(1);
-                data = rest.add(2);
-                let w = x1 as u64 | ((x2 as u64) << 32);
+                let (sig, p2) = canonicalize_inexact_unsafe(p, r, ids);
+                let (w,p3) = r.read_value(p2);
+                p = p3;
                 (sig,w)
             }).collect();
             match typ {
@@ -841,258 +935,186 @@ unsafe fn canonicalize_inexact_node_unsafe<'a>(mut data : *const u32, ids: &[ID]
         },
         _ => panic!("Unknown typ.")
     }
-    return (hasher.finish(), data);
+    return (hasher.finish(), p);
 }
 
-unsafe fn canonicalize_inexact_unsafe<'a>(data : *const u32, ids: &[ID]) -> (u64, *const u32) {
-    let w = *data;
-    let data = data.add(1);
+unsafe fn canonicalize_inexact_unsafe<'a>(p : *const u8, r: &CReader, ids: &[ID]) -> (u64, *const u8) {
+    let (w,p) = r.read_node(p);
     if is_state(w) {
-        return (ids[w as Loc] as u64, data);
+        return (ids[get_state(w) as usize] as u64, p);
     } else {
-        return canonicalize_inexact_node_unsafe(data, ids, w);
+        return canonicalize_inexact_node_unsafe(p, r, ids, get_header(w));
     }
 }
 
-fn repartition_inexact_unsafe(coa : &Coalg, states: &[State], ids: &[ID]) -> Vec<u64> {
+fn repartition_inexact_unsafe(coa : &Coalg, states: &[u32], ids: &[ID]) -> Vec<u64> {
     let mut sigs = vec![];
     sigs.reserve(states.len());
     for &state in states {
-        let loc = coa.locs[state as usize];
+        let p = coa.locs[state as usize];
         unsafe {
-            let (sig,_rest) = canonicalize_inexact(&coa.data[loc..], ids);
+            let (sig,_rest) = canonicalize_inexact_unsafe(p, &coa.reader, ids);
             sigs.push(sig);
         }
     }
     return sigs;
 }
 
+fn repartition_all_inexact_unsafe(data: &[u8], r: &CReader, ids: &[ID]) -> Vec<ID> {
+    unsafe {
+        let mut new_ids_raw = vec![];
+        new_ids_raw.reserve(ids.len());
+        let mut p = data.as_ptr();
+        while !CReader::is_at_end(data, p) {
+            let (sig, p_next) = canonicalize_inexact_unsafe(p, r, ids);
+            new_ids_raw.push(sig);
+            p = p_next;
+        }
+        return renumber(&new_ids_raw)
+    }
+}
 
-fn skip_state(data: &[u32], loc: &mut usize) {
-    let w = data[*loc];
+
+unsafe fn canonicalize_inexact_node_unsafe_init<'a>(mut p : *const u8, r: &CReader, w: u32) -> (u64, *const u8) {
+    let (typ,tag,len) = decode_header(w);
+    let mut hasher = new_hasher();
+    (typ,tag).hash(&mut hasher);
+    match typ {
+        LIST_TYP => {
+            for _ in 0..len {
+                let (sig, p2) = canonicalize_inexact_unsafe_init(p, r);
+                sig.hash(&mut hasher);
+                p = p2;
+            }
+        },
+        SET_TYP => {
+            let mut repr: Vec<u64> = (0..len).map(|_| {
+                let (sig, p2) = canonicalize_inexact_unsafe_init(p, r);
+                p = p2; sig
+            }).collect();
+            repr.sort_unstable();
+            for &sig in repr.iter().dedup() { sig.hash(&mut hasher); }
+        },
+        ADD_TYP|MAX_TYP|OR_TYP => {
+            let mut repr: Vec<(u64,u64)> = (0..len).map(|_| {
+                let (sig, p2) = canonicalize_inexact_unsafe_init(p, r);
+                let (w,p3) = r.read_value(p2);
+                p = p3;
+                (sig,w)
+            }).collect();
+            match typ {
+                ADD_TYP => hash_with_op(&mut repr, &mut hasher, |a,b| a+b),
+                OR_TYP => hash_with_op(&mut repr, &mut hasher, |a,b| a|b),
+                MAX_TYP => hash_with_op(&mut repr, &mut hasher, |a,b| max(a,b)),
+                _ => panic!("Unreachable")
+            }
+        },
+        _ => panic!("Unknown typ.")
+    }
+    return (hasher.finish(), p);
+}
+
+unsafe fn canonicalize_inexact_unsafe_init<'a>(p : *const u8, r: &CReader) -> (u64, *const u8) {
+    let (w,p) = r.read_node(p);
     if is_state(w) {
-        *loc += 1;
+        return (0, p);
     } else {
-        let typ = get_typ(w);
-        let len = get_len(w);
-        *loc += 1;
-        match typ {
-            LIST_TYP|SET_TYP => {
-                for _ in 0..len {
-                    skip_state(data,loc)
-                }
-            },
-            ADD_TYP|MAX_TYP|OR_TYP => {
-                for _ in 0..len {
-                    skip_state(data,loc);
-                    *loc += 2;
-                }
-            },
-            _ => {
-                panic!("Unknown typ.")
-            }
+        return canonicalize_inexact_node_unsafe_init(p, r, get_header(w));
+    }
+}
+
+fn init_partition_ids_unsafe(data: &[u8], r: &CReader) -> Vec<ID> {
+    unsafe {
+        let mut new_ids_raw = vec![];
+        let mut p = data.as_ptr();
+        while !CReader::is_at_end(data, p) {
+            let (sig, p_next) = canonicalize_inexact_unsafe_init(p, r);
+            new_ids_raw.push(sig);
+            p = p_next;
+        }
+        return renumber(&new_ids_raw)
+    }
+}
+
+fn partref_naive(data: &[u8], r: &CReader) -> Vec<ID> {
+    let mut ids = init_partition_ids_unsafe(data, r);
+    for iter in 0..1000000 {
+        let start_time = SystemTime::now();
+        let new_ids = repartition_all_inexact_unsafe(data, r, &ids);
+        let iter_time = start_time.elapsed().unwrap();
+
+        // debug iteration info
+        let mut new_ids2 = new_ids.clone();
+        new_ids2.sort_unstable();
+        new_ids2.dedup();
+        let num_parts = new_ids2.len();
+        // println!("- Iteration {}, number of partitions: {} (refinement time = {} seconds)", iter, num_parts, iter_time.as_secs_f32());
+        // end debug info
+
+        if new_ids[new_ids.len()-1] == new_ids.len() as u32 - 1 || new_ids == ids {
+        // if new_ids == ids {
+            println!("Number of iterations: {}", iter+1);
+            return new_ids
+        } else {
+            ids = new_ids;
         }
     }
-}
-
-/// Compute the starting index of each state
-fn all_locs(data: &[u32]) -> Vec<usize> {
-    let mut locs = vec![];
-    let mut loc = 0;
-    while loc < data.len() {
-        locs.push(loc);
-        skip_state(data, &mut loc);
-    }
-    return locs
+    panic!("Ran out of iterations.")
 }
 
 #[test]
-fn test_repartition_all() {
-    let data = read_boa_txt("tests/test1.boa.txt");
-    let ids = repartition_all_inexact(&data, &vec![0,0,0,0,0,0,0,0]);
-    assert_eq!(&ids, &vec![0,0,1,1,1,2,2,3]);
-    let ids = repartition_all(&data, &vec![0,0,0,0,0,0,0,0]);
-    assert_eq!(&ids, &vec![0,0,1,1,1,2,2,3]);
+fn test_partref_naive() {
+    let (data,r) = read_boa_txt("tests/test1.boa.txt");
+    let ids = partref_naive(&data,&r);
+    assert_eq!(&ids, &vec![0,0,1,1,2,3,3,4]);
 }
 
-fn read_expect<'a>(inp: &'a [u8], chr: u8) -> &'a [u8] {
-    if inp.len() == 0 || inp[0] != chr {
-        panic!("Expecting {:?}, got {:?}.", chr as char, String::from_utf8(inp.to_vec()).unwrap());
-    }
-    return &inp[1..];
-}
+// fn skip_state(data: &[u32], loc: &mut usize) {
+//     let w = data[*loc];
+//     if is_state(w) {
+//         *loc += 1;
+//     } else {
+//         let typ = get_typ(w);
+//         let len = get_len(w);
+//         *loc += 1;
+//         match typ {
+//             LIST_TYP|SET_TYP => {
+//                 for _ in 0..len {
+//                     skip_state(data,loc)
+//                 }
+//             },
+//             ADD_TYP|MAX_TYP|OR_TYP => {
+//                 for _ in 0..len {
+//                     skip_state(data,loc);
+//                     *loc += 2;
+//                 }
+//             },
+//             _ => {
+//                 panic!("Unknown typ.")
+//             }
+//         }
+//     }
+// }
 
-fn read_tag<'a>(inp: &'a [u8]) -> (u8,&'a [u8]) {
-    let inp = read_expect(inp, b'[');
-    let (tag,n) = lexical::parse_partial::<u8,_>(inp).expect("Expected a number in tag [_].");
-    (tag, read_expect(&inp[n..], b']'))
-}
+// /// Compute the starting index of each state
+// fn all_locs(data: &[u32]) -> Vec<usize> {
+//     let mut locs = vec![];
+//     let mut loc = 0;
+//     while loc < data.len() {
+//         locs.push(loc);
+//         skip_state(data, &mut loc);
+//     }
+//     return locs
+// }
 
-#[test]
-fn test_read_tag() {
-    assert_eq!(read_tag("[123]abc".as_bytes()), (123, "abc".as_bytes()));
-}
-
-fn read_coll<'a>(inp: &'a [u8], out: &mut Vec<u32>, typ: u8) -> &'a [u8] {
-    let (tag, inp) = read_tag(inp);
-    let header_index = out.len();
-    out.push(0);
-    let mut inp = read_expect(inp, b'{');
-    let mut len = 0;
-    if inp.len() == 0 { panic!("Unexpected end of input at start of collection.") }
-    if inp[0] == b'}' {
-        out[header_index] = coll_w(typ, tag, len);
-        return &inp[1..];
-    }
-    loop {
-        inp = read_node(inp, out);
-        len += 1;
-        if inp.len() == 0 { panic!("Unexpected end of input in collection.") }
-        if inp[0] == b'}' {
-            out[header_index] = coll_w(typ, tag, len);
-            return &inp[1..]
-        }
-        inp = read_expect(inp, b',');
-    }
-}
-
-#[test]
-fn test_read_coll() {
-    let mut out = vec![];
-    assert_eq!(read_coll("[123]{@12,@13,@14}abc".as_bytes(), &mut out, LIST_TYP), "abc".as_bytes());
-    assert_eq!(out, vec![coll_w(LIST_TYP, 123, 3),12,13,14]);
-}
-
-fn read_mon<'a>(inp: &'a [u8], out: &mut Vec<u32>, typ: u8) -> &'a [u8] {
-    let (tag, inp) = read_tag(inp);
-    let header_index = out.len();
-    out.push(0);
-    let mut inp = read_expect(inp, b'{');
-    let mut len = 0;
-    if inp.len() == 0 { panic!("Unexpected end of input at start of monoid.") }
-    if inp[0] == b'}' {
-        out[header_index] = coll_w(typ, tag, len);
-        return &inp[1..];
-    }
-    loop {
-        inp = read_node(inp, out);
-        len += 1;
-        inp = read_expect(inp, b':');
-        let (val,n) = lexical::parse_partial::<u64,_>(inp).expect("Expected a number after ':'.");
-        inp = &inp[n..];
-        out.push(val as u32);
-        out.push((val >> 32) as  u32);
-        if inp.len() == 0 { panic!("Unexpected end of input in monoid.") }
-        if inp[0] == b'}' {
-            out[header_index] = coll_w(typ, tag, len);
-            return &inp[1..]
-        }
-        inp = read_expect(inp, b',');
-    }
-}
-
-#[test]
-fn test_read_mon() {
-    let mut out = vec![];
-    assert_eq!(read_mon("[123]{@12:5,@13:6,@14:7}abc".as_bytes(), &mut out, ADD_TYP), "abc".as_bytes());
-    assert_eq!(out, vec![coll_w(ADD_TYP, 123, 3),12,5,0,13,6,0,14,7,0]);
-}
-
-fn read_node<'a>(inp: &'a [u8], out: &mut Vec<u32>) -> &'a [u8] {
-    if inp.len() == 0 { panic!("Expected start of a node, but input is empty.") }
-    let chr = inp[0];
-    let orig = inp;
-    let inp = &inp[1..];
-    match chr {
-        b'@' => {
-            let (state,n) = lexical::parse_partial::<u32,_>(inp).expect("Expected a number after '@'.");
-            assert!(is_state(state));
-            out.push(state);
-            return &inp[n..];
-        },
-        b'L' => {
-            if inp.len() < 3 || inp[0..3] != [b'i', b's', b't'] {
-                panic!("Expected \"List\", got {:?}", String::from_utf8(orig.to_vec()).unwrap());
-            }
-            return read_coll(&inp[3..], out, LIST_TYP);
-        },
-        b'S' => {
-            if inp.len() < 2 || inp[0..2] != [b'e', b't'] {
-                panic!("Expected \"Set\" got {:?}", String::from_utf8(orig.to_vec()).unwrap());
-            }
-            return read_coll(&inp[2..], out, SET_TYP);
-        },
-        b'A' => {
-            if inp.len() < 2 || inp[0..2] != [b'd', b'd'] {
-                panic!("Expected \"Add\" got {:?}", String::from_utf8(orig.to_vec()).unwrap());
-            }
-            return read_mon(&inp[2..], out, ADD_TYP);
-        },
-        b'O' => {
-            if inp.len() < 1 || inp[0..1] != [b'r'] {
-                panic!("Expected \"Or\" got {:?}", String::from_utf8(orig.to_vec()).unwrap());
-            }
-            return read_mon(&inp[1..], out, OR_TYP);
-        },
-        b'M' => {
-            if inp.len() < 2 || inp[0..2] != [b'a', b'x'] {
-                panic!("Expected \"Max\", got {:?}", String::from_utf8(orig.to_vec()).unwrap());
-            }
-            return read_mon(&inp[2..], out, MAX_TYP);
-        },
-        _ => { panic!("Expected start of a node, but got {:?}.", String::from_utf8(orig.to_vec()).unwrap()) }
-    }
-}
-
-#[test]
-fn test_read_node() {
-    let mut out = vec![];
-    assert_eq!(read_node("List[123]{@12,@13,@14}abc".as_bytes(), &mut out), "abc".as_bytes());
-    assert_eq!(out, vec![coll_w(LIST_TYP, 123, 3),12,13,14]);
-
-    let mut out = vec![];
-    assert_eq!(read_node("Set[123]{@12,@13,@14}abc".as_bytes(), &mut out), "abc".as_bytes());
-    assert_eq!(out, vec![coll_w(SET_TYP, 123, 3),12,13,14]);
-
-    let mut out = vec![];
-    assert_eq!(read_node("Set[123]{}abc".as_bytes(), &mut out), "abc".as_bytes());
-    assert_eq!(out, vec![coll_w(SET_TYP, 123, 0)]);
-
-    let mut out = vec![];
-    assert_eq!(read_node("Add[123]{@12:5,@13:6,@14:7}abc".as_bytes(), &mut out), "abc".as_bytes());
-    assert_eq!(out, vec![coll_w(ADD_TYP, 123, 3),12,5,0,13,6,0,14,7,0]);
-
-    let mut out = vec![];
-    assert_eq!(read_node("Max[123]{@12:5,@13:6,@14:7}abc".as_bytes(), &mut out), "abc".as_bytes());
-    assert_eq!(out, vec![coll_w(MAX_TYP, 123, 3),12,5,0,13,6,0,14,7,0]);
-
-    let mut out = vec![];
-    assert_eq!(read_node("Or[123]{@12:5,@13:6,@14:7}abc".as_bytes(), &mut out), "abc".as_bytes());
-    assert_eq!(out, vec![coll_w(OR_TYP, 123, 3),12,5,0,13,6,0,14,7,0]);
-
-    let mut out = vec![];
-    assert_eq!(read_node("Or[123]{}abc".as_bytes(), &mut out), "abc".as_bytes());
-    assert_eq!(out, vec![coll_w(OR_TYP, 123, 0)]);
-}
-
-
-fn read_boa_txt<P>(filename: P) -> Vec<u32>
-where P: AsRef<Path>, {
-    let file = File::open(&filename).
-        expect(&format!("Couldn't open file {:?}", filename.as_ref().display().to_string()));
-    let mut reader = BufReader::new(file);
-    let mut line = vec![];
-    let mut data : Vec<u32> = vec![];
-    while 0 < reader.read_until(b'\n', &mut line).expect("Failure while reading file.") {
-        let remaining = read_node(&line, &mut data);
-        if remaining.len() > 1 {
-            panic!("Did not parse everything on the line: {:?} remaining (complete input was: {:?})",
-                    String::from_utf8(remaining.to_vec()).unwrap(), String::from_utf8(line.clone()).unwrap());
-        }
-        line.clear();
-    }
-    return data
-}
+// #[test]
+// fn test_repartition_all() {
+//     let data = read_boa_txt("tests/test1.boa.txt");
+//     let ids = repartition_all_inexact(&data, &vec![0,0,0,0,0,0,0,0]);
+//     assert_eq!(&ids, &vec![0,0,1,1,1,2,2,3]);
+//     let ids = repartition_all(&data, &vec![0,0,0,0,0,0,0,0]);
+//     assert_eq!(&ids, &vec![0,0,1,1,1,2,2,3]);
+// }
 
 fn renumber<A> (ids: &[A]) -> Vec<u32>
 where A:Hash+Eq {
@@ -1137,414 +1159,367 @@ fn test_cumsum() {
 }
 
 
-fn repartition_all(data: &[u32], ids: &[ID]) -> Vec<ID> {
-    let mut tables = Tables {
-        last_id: 0,
-        coll_table: HMap::default(),
-        mon_table: HMap::default()
-    };
-    let mut new_ids_raw = vec![];
-    let mut loc_mut = 0;
-    while loc_mut < data.len() {
-        new_ids_raw.push(canonicalize(data, ids, &mut loc_mut, &mut tables));
-    }
-    return renumber(&new_ids_raw)
-}
+// fn repartition_all(data: &[u32], ids: &[ID]) -> Vec<ID> {
+//     let mut tables = Tables {
+//         last_id: 0,
+//         coll_table: HMap::default(),
+//         mon_table: HMap::default()
+//     };
+//     let mut new_ids_raw = vec![];
+//     let mut loc_mut = 0;
+//     while loc_mut < data.len() {
+//         new_ids_raw.push(canonicalize(data, ids, &mut loc_mut, &mut tables));
+//     }
+//     return renumber(&new_ids_raw)
+// }
 
-fn repartition_all_inexact(data: &[u32], ids: &[ID]) -> Vec<ID> {
-    let mut new_ids_raw = vec![];
-    new_ids_raw.reserve(ids.len());
-    let mut rest = data;
-    while rest.len() > 0 {
-        let (sig, rest_next) = canonicalize_inexact(rest, ids);
-        new_ids_raw.push(sig);
-        rest = rest_next;
-    }
-    return renumber(&new_ids_raw)
-}
-
-fn repartition_all_inexact_unsafe(data: &[u32], ids: &[ID]) -> Vec<ID> {
-    unsafe {
-        let mut new_ids_raw = vec![];
-        new_ids_raw.reserve(ids.len());
-        let mut rest = data.as_ptr();
-        let end = rest.add(data.len());
-        while rest != end {
-                let (sig, rest_next) = canonicalize_inexact_unsafe(rest, ids);
-                new_ids_raw.push(sig);
-                rest = rest_next;
-        }
-        return renumber(&new_ids_raw)
-    }
-}
-
-fn count_states(data: &[u32]) -> usize {
-    let mut n = 0;
-    let mut loc = 0;
-    while loc < data.len() {
-        n += 1;
-        skip_state(data, &mut loc);
-    }
-    return n
-}
-
-fn canonicalize_inexact_node_init<'a>(mut data : &'a [u32], w: u32) -> (u64, &'a [u32]) {
-    let typ = get_typ(w);
-    let tag = get_tag(w);
-    let len = get_len(w);
-    let mut hasher = new_hasher();
-    tag.hash(&mut hasher);
-    match typ {
-        LIST_TYP => {
-            for _ in 0..len {
-                let (sig, rest) = canonicalize_inexact_init(data);
-                sig.hash(&mut hasher);
-                data = rest;
-            }
-        },
-        SET_TYP => {
-            let mut repr: Vec<u64> = (0..len).map(|_| {
-                let (sig, rest) = canonicalize_inexact_init(data);
-                data = rest; sig
-            }).collect();
-            repr.sort_unstable();
-            repr.dedup();
-            repr.hash(&mut hasher);
-            // for &sig in repr.iter().dedup() { sig.hash(&mut hasher); }
-        },
-        ADD_TYP => {
-            let mut repr: Vec<(u64,u64)> = (0..len).map(|_| {
-                let (sig, rest) = canonicalize_inexact_init(data);
-                let x1 = rest[0];
-                let x2 = rest[1];
-                data = &rest[2..];
-                let w = x1 as u64 | ((x2 as u64) << 32);
-                (sig,w)
-            }).collect();
-            hash_with_op(&mut repr, &mut hasher, |a,b| a+b);
-        },
-        MAX_TYP => {
-            let mut repr: Vec<(u64,u64)> = (0..len).map(|_| {
-                let (sig, rest) = canonicalize_inexact_init(data);
-                let x1 = rest[0];
-                let x2 = rest[1];
-                data = &rest[2..];
-                let w = x1 as u64 | ((x2 as u64) << 32);
-                (sig,w)
-            }).collect();
-            hash_with_op(&mut repr, &mut hasher, |a,b| max(a,b));
-        },
-        OR_TYP => {
-            let mut repr: Vec<(u64,u64)> = (0..len).map(|_| {
-                let (sig, rest) = canonicalize_inexact_init(data);
-                let x1 = rest[0];
-                let x2 = rest[1];
-                data = &rest[2..];
-                let w = x1 as u64 | ((x2 as u64) << 32);
-                (sig,w)
-            }).collect();
-            hash_with_op(&mut repr, &mut hasher, |a,b| a|b);
-        },
-        _ => {
-            panic!("Unknown typ.")
-        }
-    }
-    return (hasher.finish(), data);
-}
-
-#[inline]
-fn canonicalize_inexact_init<'a>(data : &'a [u32]) -> (u64, &'a [u32]) {
-    let w = data[0];
-    let data = &data[1..];
-    if is_state(w) {
-        return (0, data);
-    } else {
-        return canonicalize_inexact_node_init(data, w);
-    }
-}
-
-fn init_partition_ids(data: &[u32]) -> Vec<u32> {
-    let mut new_ids_raw = vec![];
-    let mut rest = data;
-    while rest.len() > 0 {
-        let (sig, rest_next) = canonicalize_inexact_init(rest);
-        new_ids_raw.push(sig);
-        rest = rest_next;
-    }
-    return renumber(&new_ids_raw)
-}
-
-fn partref_naive(data: &[u32]) -> Vec<ID> {
-    // let n = count_states(data);
-    // let mut ids = vec![0;n];
-    let mut ids = init_partition_ids(data);
-    for iter in 0..1000000 {
-        let start_time = SystemTime::now();
-        let new_ids = repartition_all_inexact_unsafe(data, &ids);
-        let iter_time = start_time.elapsed().unwrap();
-
-        // debug iteration info
-        let mut new_ids2 = new_ids.clone();
-        new_ids2.sort_unstable();
-        new_ids2.dedup();
-        let num_parts = new_ids2.len();
-        // println!("- Iteration {}, number of partitions: {} (refinement time = {} seconds)", iter, num_parts, iter_time.as_secs_f32());
-        // end debug info
-
-        if new_ids[new_ids.len()-1] == new_ids.len() as u32 - 1 || new_ids == ids {
-        // if new_ids == ids {
-            println!("Number of iterations: {}", iter+1);
-            return new_ids
-        } else {
-            ids = new_ids;
-        }
-    }
-    panic!("Ran out of iterations.")
-}
-
-#[test]
-fn test_partref_naive() {
-    let data = read_boa_txt("tests/test1.boa.txt");
-    let ids = partref_naive(&data);
-    assert_eq!(&ids, &vec![0,0,1,1,2,3,3,4]);
-}
-
-fn counts_vec(xs: &[u32]) -> Vec<u32> {
-    let mut counts = vec![];
-    for &x in xs {
-        while x as usize >= counts.len() { counts.push(0); }
-        counts[x as usize] += 1;
-    }
-    return counts;
-}
-
-#[test]
-fn test_counts_vec() {
-    let counts = counts_vec(&vec![0,0,1,1,3,4,5,5,5]);
-    assert_eq!(counts[0],2);
-    assert_eq!(counts[1],2);
-    assert_eq!(counts[3],1);
-    assert_eq!(counts[4],1);
-    assert_eq!(counts[5],3);
-}
-
-fn index_of_max(counts: &[u32]) -> usize {
-    let mut i_max = usize::MAX;
-    let mut v_max = 0;
-    for i in 0..counts.len() {
-        if counts[i] >= v_max {
-            i_max = i;
-            v_max = counts[i];
-        }
-    }
-    return i_max
-}
-
-#[test]
-fn test_index_of_max() {
-    assert_eq!(index_of_max(&vec![0,3,1,2,3,4,3]), 5);
-}
-
-struct DirtyPartitions {
-    buffer: Vec<State>, // buffer of states (partitioned)
-    position: Vec<u32>, // position of each state in partition array
-    partition_id: Vec<ID>, // partition of each state
-    partition: Vec<(u32,u32,u32)>, // vector of partitions (start, mid, end) where the states in start..mid are mid and mid..end are clean
-    worklist: Vec<u32>, // worklist of partitions
-}
-
-impl DirtyPartitions {
-    fn new(num_states: u32) -> DirtyPartitions {
-        DirtyPartitions {
-            buffer: (0..num_states).collect(),
-            position: (0..num_states).collect(),
-            partition_id: vec![0;num_states as usize],
-            partition: vec![(0, 0, num_states)], // for partition (start, mid, end), the states start..mid are clean and mid..end are dirty
-            worklist: vec![0]
-        }
-    }
-
-    /// Mark the state as dirty, putting its partition on the worklist if necessary
-    /// Time complexity: O(1)
-    fn mark_dirty(self: &mut DirtyPartitions, state: State) {
-        let id = self.partition_id[state as usize];
-        let pos = self.position[state as usize];
-        let (start, mid, end) = self.partition[id as usize];
-        // println!("mark_dirty(_,{}): id={}, pos={}, part={:?}", state, id, pos, (start,mid,end));
-        if end - start <= 1 { return } // don't need to mark states dirty if they are in a singleton partition
-        if mid <= pos { // state is already dirty
-            return
-        }
-        if mid == end { // no dirty states in partition yet, so put it onto worklist
-            self.worklist.push(id)
-        }
-        self.partition[id as usize].1 -= 1; // decrement the dirty states marker to make space
-        let other_state = self.buffer[mid as usize - 1]; // the state that we will swap
-        self.position[other_state as usize] = pos;
-        self.position[state as usize] = mid;
-        self.buffer[pos as usize] = other_state;
-        self.buffer[mid as usize - 1] = state;
-    }
-
-    /// Determine slice of states to compute signatures for.
-    /// Includes one clean state at the start if there are any clean states.
-    /// Time complexity: O(1)
-    fn refiners(self: &DirtyPartitions, id: ID) -> &[State] {
-        let (start, mid, end) = self.partition[id as usize];
-        if start == mid { // no clean states
-            return &self.buffer[start as usize..end as usize]
-        } else { // there are clean states
-            return &self.buffer[(mid-1) as usize..end as usize]
-        }
-    }
-
-    /// Time complexity: O(signatures.len())
-    /// Returns vector of new partition ids
-    /// Signatures are assumed to be 0..n with the first starting with 0
-    fn refine(self: &mut DirtyPartitions, partition_id: ID, signatures: &[u32]) -> Vec<u32> {
-        // let signatures = renumber(signatures); // Renumber signatures to be 0..n. This makes the sig of the clean states 0 if there are any.
-
-        // compute the occurrence counts of each of the signatures
-        let mut counts = counts_vec(&signatures);
-        let (start,mid,end) = self.partition[partition_id as usize];
-        if start < mid { counts[0] += mid - start - 1 } // add count of clean part
-
-        // sort the relevant part of self.buffer by signature
-        // also restores invariant for self.position and self.partition_id
-        let largest_partition = index_of_max(&counts) as u32;
-        let next_available_partition_id = self.partition.len() as u32;
-
-        let mut cum_counts = cumsum(&counts);
-        let original_states = self.refiners(partition_id).to_vec();
-        for i in 0..original_states.len() {
-            let sig = signatures[i];
-            let state = original_states[i];
-            cum_counts[sig as usize] -= 1;
-            let j = start+cum_counts[sig as usize];
-            self.buffer[j as usize] = state;
-            self.position[state as usize] = j;
-
-            if sig != largest_partition {
-                let new_sig = next_available_partition_id + if sig < largest_partition { sig } else { sig - 1 };
-                self.partition_id[state as usize] = new_sig;
-            }
-        }
-
-        if largest_partition != 0 {
-            // need to relabel the clean states
-            for i in start..mid {
-                let state = self.buffer[i as usize];
-                self.partition_id[state as usize] = next_available_partition_id;
-            }
-        }
-
-        if start < mid { cum_counts[0] -= mid - start - 1 }
-        debug_assert_eq!(cum_counts[0],0);
-        debug_assert_eq!(cum_counts[cum_counts.len()-1] + counts[counts.len()-1], end - start);
+// fn repartition_all_inexact(data: &[u32], ids: &[ID]) -> Vec<ID> {
+//     let mut new_ids_raw = vec![];
+//     new_ids_raw.reserve(ids.len());
+//     let mut rest = data;
+//     while rest.len() > 0 {
+//         let (sig, rest_next) = canonicalize_inexact(rest, ids);
+//         new_ids_raw.push(sig);
+//         rest = rest_next;
+//     }
+//     return renumber(&new_ids_raw)
+// }
 
 
-        // we will return vector of the new partitions
-        let mut new_partitions: Vec<u32> = vec![];
+// fn count_states(data: &[u32]) -> usize {
+//     let mut n = 0;
+//     let mut loc = 0;
+//     while loc < data.len() {
+//         n += 1;
+//         skip_state(data, &mut loc);
+//     }
+//     return n
+// }
 
-        // restore invariant of self.partition
-        for sig in 0..counts.len() as u32 {
-            let new_start = start+cum_counts[sig as usize];
-            let new_end = start+cum_counts[sig as usize]+counts[sig as usize];
-            let new_part = (new_start, new_end, new_end); // all states are clean now (but may be marked dirty later)
-            if sig == largest_partition {
-                self.partition[partition_id as usize] = new_part;
-            } else {
-                new_partitions.push(self.partition.len() as u32);
-                self.partition.push(new_part);
-            }
-        }
+// fn canonicalize_inexact_node_init<'a>(mut data : &'a [u32], w: u32) -> (u64, &'a [u32]) {
+//     let typ = get_typ(w);
+//     let tag = get_tag(w);
+//     let len = get_len(w);
+//     let mut hasher = new_hasher();
+//     tag.hash(&mut hasher);
+//     match typ {
+//         LIST_TYP => {
+//             for _ in 0..len {
+//                 let (sig, rest) = canonicalize_inexact_init(data);
+//                 sig.hash(&mut hasher);
+//                 data = rest;
+//             }
+//         },
+//         SET_TYP => {
+//             let mut repr: Vec<u64> = (0..len).map(|_| {
+//                 let (sig, rest) = canonicalize_inexact_init(data);
+//                 data = rest; sig
+//             }).collect();
+//             repr.sort_unstable();
+//             repr.dedup();
+//             repr.hash(&mut hasher);
+//             // for &sig in repr.iter().dedup() { sig.hash(&mut hasher); }
+//         },
+//         ADD_TYP => {
+//             let mut repr: Vec<(u64,u64)> = (0..len).map(|_| {
+//                 let (sig, rest) = canonicalize_inexact_init(data);
+//                 let x1 = rest[0];
+//                 let x2 = rest[1];
+//                 data = &rest[2..];
+//                 let w = x1 as u64 | ((x2 as u64) << 32);
+//                 (sig,w)
+//             }).collect();
+//             hash_with_op(&mut repr, &mut hasher, |a,b| a+b);
+//         },
+//         MAX_TYP => {
+//             let mut repr: Vec<(u64,u64)> = (0..len).map(|_| {
+//                 let (sig, rest) = canonicalize_inexact_init(data);
+//                 let x1 = rest[0];
+//                 let x2 = rest[1];
+//                 data = &rest[2..];
+//                 let w = x1 as u64 | ((x2 as u64) << 32);
+//                 (sig,w)
+//             }).collect();
+//             hash_with_op(&mut repr, &mut hasher, |a,b| max(a,b));
+//         },
+//         OR_TYP => {
+//             let mut repr: Vec<(u64,u64)> = (0..len).map(|_| {
+//                 let (sig, rest) = canonicalize_inexact_init(data);
+//                 let x1 = rest[0];
+//                 let x2 = rest[1];
+//                 data = &rest[2..];
+//                 let w = x1 as u64 | ((x2 as u64) << 32);
+//                 (sig,w)
+//             }).collect();
+//             hash_with_op(&mut repr, &mut hasher, |a,b| a|b);
+//         },
+//         _ => {
+//             panic!("Unknown typ.")
+//         }
+//     }
+//     return (hasher.finish(), data);
+// }
 
-        return new_partitions;
-    }
-}
+// #[inline]
+// fn canonicalize_inexact_init<'a>(data : &'a [u32]) -> (u64, &'a [u32]) {
+//     let w = data[0];
+//     let data = &data[1..];
+//     if is_state(w) {
+//         return (0, data);
+//     } else {
+//         return canonicalize_inexact_node_init(data, w);
+//     }
+// }
 
-fn partref_nlogn_raw(data: Vec<u32>) -> Vec<ID> {
-    // println!("===================== Starting partref_nlogn");
-    // panic!("Stopped");
-    let coa = Coalg::new(data);
-    // coa.dump();
-    // coa.dump_backrefs();
-    let mut iters = 0;
-    let mut parts = DirtyPartitions::new(coa.num_states());
-    while let Some(partition_id) = parts.worklist.pop() {
-        let states = parts.refiners(partition_id);
-        // println!("states = {:?}", states);
-        let signatures = renumber::<u64>(&repartition_inexact_unsafe(&coa, states, &parts.partition_id));
-        // println!("partition id = {:?}, partition = {:?}, states = {:?}, sigs = {:?}", partition_id, parts.partition[partition_id as usize], states, &signatures);
-        let new_partitions = parts.refine(partition_id, &signatures);
-        // println!("shrunk partition = {:?}, new partitions = {:?}, buffer = {:?}", parts.partition[partition_id as usize], &new_partitions.iter().map(|pid| parts.partition[*pid as usize]).collect::<Vec<(u32,u32,u32)>>(), &parts.buffer);
-        for new_partition_id in new_partitions {
-            // mark dirty all predecessors of states in this partition
-            // let part_debug = parts.partition[new_partition_id as usize];
-            let (start,_, end) = parts.partition[new_partition_id as usize];
-            let states = parts.buffer[start as usize..end as usize].to_vec();
-            for state in states {
-                for &state2 in coa.state_backrefs(state) {
-                    // println!("state {} marks state {} as dirty (new partition: {:?} id: {})", state, state2, &part_debug, new_partition_id);
-                    parts.mark_dirty(state2);
-                }
-            }
-        }
-        iters += 1;
-        // if iters > 47730 { panic!("Stop!") }
-    }
-    println!("Number of iterations: {} ", iters);
-    // println!("===================== Ending partref_nlogn");
-    return parts.partition_id;
-}
+// fn init_partition_ids(data: &[u32]) -> Vec<u32> {
+//     let mut new_ids_raw = vec![];
+//     let mut rest = data;
+//     while rest.len() > 0 {
+//         let (sig, rest_next) = canonicalize_inexact_init(rest);
+//         new_ids_raw.push(sig);
+//         rest = rest_next;
+//     }
+//     return renumber(&new_ids_raw)
+// }
 
-fn partref_nlogn(data: Vec<u32>) -> Vec<ID> {
-    let ids = partref_nlogn_raw(data);
-    return renumber(&ids);
-}
 
-#[test]
-fn test_partref_nlogn() {
-    // List[0]{@0,@1}
-    // List[0]{@1,@1}
-    // List[1]{@0,@0}
-    // List[1]{@0,@0}
-    // List[1]{@3,@4}
-    // Add[0]{@0:1,@1:1}
-    // Add[0]{@0:2}
-    // Add[0]{@0:2,@1:1}
-    let data = read_boa_txt("tests/test1.boa.txt");
-    let ids1 = partref_naive(&data);
-    let ids2 = partref_nlogn(data);
-    assert_eq!(&ids1, &ids2);
 
-    let data = read_boa_txt("tests/test2.boa.txt");
-    let ids = partref_nlogn(data);
-    assert_eq!(&ids, &vec![0,1,2,3,4,5]);
-}
+// fn counts_vec(xs: &[u32]) -> Vec<u32> {
+//     let mut counts = vec![];
+//     for &x in xs {
+//         while x as usize >= counts.len() { counts.push(0); }
+//         counts[x as usize] += 1;
+//     }
+//     return counts;
+// }
 
-#[test]
-fn test_partref_wlan() {
-    let filename = "benchmarks/small/wlan0_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_582327_771088_roundrobin_4.boa.txt";
-    let data = read_boa_txt(&filename);
-    let ids = partref_nlogn(data);
-    assert_eq!(*ids.iter().max().unwrap(), 107864);
+// #[test]
+// fn test_counts_vec() {
+//     let counts = counts_vec(&vec![0,0,1,1,3,4,5,5,5]);
+//     assert_eq!(counts[0],2);
+//     assert_eq!(counts[1],2);
+//     assert_eq!(counts[3],1);
+//     assert_eq!(counts[4],1);
+//     assert_eq!(counts[5],3);
+// }
 
-    let filename = "benchmarks/wlan/wlan1_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_1408676_1963522_roundrobin_32.boa.txt";
-    let data = read_boa_txt(&filename);
-    let ids = partref_nlogn(data);
-    assert_eq!(*ids.iter().max().unwrap(), 243324);
+// fn index_of_max(counts: &[u32]) -> usize {
+//     let mut i_max = usize::MAX;
+//     let mut v_max = 0;
+//     for i in 0..counts.len() {
+//         if counts[i] >= v_max {
+//             i_max = i;
+//             v_max = counts[i];
+//         }
+//     }
+//     return i_max
+// }
 
-    // let filename = "benchmarks/small/wlan0_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_582327_771088_roundrobin_4.boa.txt";
-    // let data = read_boa_txt(&filename);
-    // let ids = partref_naive(&data);
-    // assert_eq!(*ids.iter().max().unwrap(), 107864);
+// #[test]
+// fn test_index_of_max() {
+//     assert_eq!(index_of_max(&vec![0,3,1,2,3,4,3]), 5);
+// }
 
-    // let filename = "benchmarks/wlan/wlan1_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_1408676_1963522_roundrobin_32.boa.txt";
-    // let data = read_boa_txt(&filename);
-    // let ids = partref_naive(&data);
-    // assert_eq!(*ids.iter().max().unwrap(), 243324);
-}
+// struct DirtyPartitions {
+//     buffer: Vec<State>, // buffer of states (partitioned)
+//     position: Vec<u32>, // position of each state in partition array
+//     partition_id: Vec<ID>, // partition of each state
+//     partition: Vec<(u32,u32,u32)>, // vector of partitions (start, mid, end) where the states in start..mid are mid and mid..end are clean
+//     worklist: Vec<u32>, // worklist of partitions
+// }
+
+// impl DirtyPartitions {
+//     fn new(num_states: u32) -> DirtyPartitions {
+//         DirtyPartitions {
+//             buffer: (0..num_states).collect(),
+//             position: (0..num_states).collect(),
+//             partition_id: vec![0;num_states as usize],
+//             partition: vec![(0, 0, num_states)], // for partition (start, mid, end), the states start..mid are clean and mid..end are dirty
+//             worklist: vec![0]
+//         }
+//     }
+
+//     /// Mark the state as dirty, putting its partition on the worklist if necessary
+//     /// Time complexity: O(1)
+//     fn mark_dirty(self: &mut DirtyPartitions, state: State) {
+//         let id = self.partition_id[state as usize];
+//         let pos = self.position[state as usize];
+//         let (start, mid, end) = self.partition[id as usize];
+//         // println!("mark_dirty(_,{}): id={}, pos={}, part={:?}", state, id, pos, (start,mid,end));
+//         if end - start <= 1 { return } // don't need to mark states dirty if they are in a singleton partition
+//         if mid <= pos { // state is already dirty
+//             return
+//         }
+//         if mid == end { // no dirty states in partition yet, so put it onto worklist
+//             self.worklist.push(id)
+//         }
+//         self.partition[id as usize].1 -= 1; // decrement the dirty states marker to make space
+//         let other_state = self.buffer[mid as usize - 1]; // the state that we will swap
+//         self.position[other_state as usize] = pos;
+//         self.position[state as usize] = mid;
+//         self.buffer[pos as usize] = other_state;
+//         self.buffer[mid as usize - 1] = state;
+//     }
+
+//     /// Determine slice of states to compute signatures for.
+//     /// Includes one clean state at the start if there are any clean states.
+//     /// Time complexity: O(1)
+//     fn refiners(self: &DirtyPartitions, id: ID) -> &[State] {
+//         let (start, mid, end) = self.partition[id as usize];
+//         if start == mid { // no clean states
+//             return &self.buffer[start as usize..end as usize]
+//         } else { // there are clean states
+//             return &self.buffer[(mid-1) as usize..end as usize]
+//         }
+//     }
+
+//     /// Time complexity: O(signatures.len())
+//     /// Returns vector of new partition ids
+//     /// Signatures are assumed to be 0..n with the first starting with 0
+//     fn refine(self: &mut DirtyPartitions, partition_id: ID, signatures: &[u32]) -> Vec<u32> {
+//         // let signatures = renumber(signatures); // Renumber signatures to be 0..n. This makes the sig of the clean states 0 if there are any.
+
+//         // compute the occurrence counts of each of the signatures
+//         let mut counts = counts_vec(&signatures);
+//         let (start,mid,end) = self.partition[partition_id as usize];
+//         if start < mid { counts[0] += mid - start - 1 } // add count of clean part
+
+//         // sort the relevant part of self.buffer by signature
+//         // also restores invariant for self.position and self.partition_id
+//         let largest_partition = index_of_max(&counts) as u32;
+//         let next_available_partition_id = self.partition.len() as u32;
+
+//         let mut cum_counts = cumsum(&counts);
+//         let original_states = self.refiners(partition_id).to_vec();
+//         for i in 0..original_states.len() {
+//             let sig = signatures[i];
+//             let state = original_states[i];
+//             cum_counts[sig as usize] -= 1;
+//             let j = start+cum_counts[sig as usize];
+//             self.buffer[j as usize] = state;
+//             self.position[state as usize] = j;
+
+//             if sig != largest_partition {
+//                 let new_sig = next_available_partition_id + if sig < largest_partition { sig } else { sig - 1 };
+//                 self.partition_id[state as usize] = new_sig;
+//             }
+//         }
+
+//         if largest_partition != 0 {
+//             // need to relabel the clean states
+//             for i in start..mid {
+//                 let state = self.buffer[i as usize];
+//                 self.partition_id[state as usize] = next_available_partition_id;
+//             }
+//         }
+
+//         if start < mid { cum_counts[0] -= mid - start - 1 }
+//         debug_assert_eq!(cum_counts[0],0);
+//         debug_assert_eq!(cum_counts[cum_counts.len()-1] + counts[counts.len()-1], end - start);
+
+
+//         // we will return vector of the new partitions
+//         let mut new_partitions: Vec<u32> = vec![];
+
+//         // restore invariant of self.partition
+//         for sig in 0..counts.len() as u32 {
+//             let new_start = start+cum_counts[sig as usize];
+//             let new_end = start+cum_counts[sig as usize]+counts[sig as usize];
+//             let new_part = (new_start, new_end, new_end); // all states are clean now (but may be marked dirty later)
+//             if sig == largest_partition {
+//                 self.partition[partition_id as usize] = new_part;
+//             } else {
+//                 new_partitions.push(self.partition.len() as u32);
+//                 self.partition.push(new_part);
+//             }
+//         }
+
+//         return new_partitions;
+//     }
+// }
+
+// fn partref_nlogn_raw(data: Vec<u32>) -> Vec<ID> {
+//     // println!("===================== Starting partref_nlogn");
+//     // panic!("Stopped");
+//     let coa = Coalg::new(data);
+//     // coa.dump();
+//     // coa.dump_backrefs();
+//     let mut iters = 0;
+//     let mut parts = DirtyPartitions::new(coa.num_states());
+//     while let Some(partition_id) = parts.worklist.pop() {
+//         let states = parts.refiners(partition_id);
+//         // println!("states = {:?}", states);
+//         let signatures = renumber::<u64>(&repartition_inexact_unsafe(&coa, states, &parts.partition_id));
+//         // println!("partition id = {:?}, partition = {:?}, states = {:?}, sigs = {:?}", partition_id, parts.partition[partition_id as usize], states, &signatures);
+//         let new_partitions = parts.refine(partition_id, &signatures);
+//         // println!("shrunk partition = {:?}, new partitions = {:?}, buffer = {:?}", parts.partition[partition_id as usize], &new_partitions.iter().map(|pid| parts.partition[*pid as usize]).collect::<Vec<(u32,u32,u32)>>(), &parts.buffer);
+//         for new_partition_id in new_partitions {
+//             // mark dirty all predecessors of states in this partition
+//             // let part_debug = parts.partition[new_partition_id as usize];
+//             let (start,_, end) = parts.partition[new_partition_id as usize];
+//             let states = parts.buffer[start as usize..end as usize].to_vec();
+//             for state in states {
+//                 for &state2 in coa.state_backrefs(state) {
+//                     // println!("state {} marks state {} as dirty (new partition: {:?} id: {})", state, state2, &part_debug, new_partition_id);
+//                     parts.mark_dirty(state2);
+//                 }
+//             }
+//         }
+//         iters += 1;
+//         // if iters > 47730 { panic!("Stop!") }
+//     }
+//     println!("Number of iterations: {} ", iters);
+//     // println!("===================== Ending partref_nlogn");
+//     return parts.partition_id;
+// }
+
+// fn partref_nlogn(data: Vec<u32>) -> Vec<ID> {
+//     let ids = partref_nlogn_raw(data);
+//     return renumber(&ids);
+// }
+
+// #[test]
+// fn test_partref_nlogn() {
+//     // List[0]{@0,@1}
+//     // List[0]{@1,@1}
+//     // List[1]{@0,@0}
+//     // List[1]{@0,@0}
+//     // List[1]{@3,@4}
+//     // Add[0]{@0:1,@1:1}
+//     // Add[0]{@0:2}
+//     // Add[0]{@0:2,@1:1}
+//     let data = read_boa_txt("tests/test1.boa.txt");
+//     let ids1 = partref_naive(&data);
+//     let ids2 = partref_nlogn(data);
+//     assert_eq!(&ids1, &ids2);
+
+//     let data = read_boa_txt("tests/test2.boa.txt");
+//     let ids = partref_nlogn(data);
+//     assert_eq!(&ids, &vec![0,1,2,3,4,5]);
+// }
+
+// #[test]
+// fn test_partref_wlan() {
+//     let filename = "benchmarks/small/wlan0_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_582327_771088_roundrobin_4.boa.txt";
+//     let data = read_boa_txt(&filename);
+//     let ids = partref_nlogn(data);
+//     assert_eq!(*ids.iter().max().unwrap(), 107864);
+
+//     let filename = "benchmarks/wlan/wlan1_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_1408676_1963522_roundrobin_32.boa.txt";
+//     let data = read_boa_txt(&filename);
+//     let ids = partref_nlogn(data);
+//     assert_eq!(*ids.iter().max().unwrap(), 243324);
+
+//     // let filename = "benchmarks/small/wlan0_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_582327_771088_roundrobin_4.boa.txt";
+//     // let data = read_boa_txt(&filename);
+//     // let ids = partref_naive(&data);
+//     // assert_eq!(*ids.iter().max().unwrap(), 107864);
+
+//     // let filename = "benchmarks/wlan/wlan1_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_1408676_1963522_roundrobin_32.boa.txt";
+//     // let data = read_boa_txt(&filename);
+//     // let ids = partref_naive(&data);
+//     // assert_eq!(*ids.iter().max().unwrap(), 243324);
+// }
 
 fn main() -> Result<(),()> {
     let args:Vec<String> = env::args().collect();
@@ -1565,12 +1540,12 @@ fn main() -> Result<(),()> {
 
     let mut start_time = SystemTime::now();
     println!("Starting parsing {}... ", filename);
-    let data = read_boa_txt(filename);
+    let (data,r) = read_boa_txt(filename);
     let parsing_time = start_time.elapsed().unwrap();
     println!("Parsing done, size: {} in {} seconds", data.len(), parsing_time.as_secs_f32());
 
     start_time = SystemTime::now();
-    let ids = partref_naive(&data);
+    let ids = partref_naive(&data, &r);
     // let ids = partref_nlogn(data);
     println!("Number of states: {}, Number of partitions: {}", ids.len(), ids.iter().max().unwrap()+1);
     let computation_time = start_time.elapsed().unwrap();
@@ -1592,4 +1567,3 @@ fn main() -> Result<(),()> {
 
     Ok(())
 }
-

@@ -17,9 +17,9 @@ byteorder = "1.4.3"
 jemallocator = "0.3.2"
 
 [profile.dev]
-opt-level = 3
-incremental = false
-codegen-units = 16
+#opt-level = 3
+#incremental = false
+#codegen-units = 16
 
 [profile.release]
 lto = true
