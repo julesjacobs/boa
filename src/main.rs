@@ -1,9 +1,15 @@
 #![allow(dead_code)]
 use std::{hash::{Hash, Hasher}, fs::File, io::{BufReader, BufRead}, path::Path, cmp::max, time::SystemTime, env};
 
+unsafe fn read_u64(buf: &[u8], i: usize) -> u64 {
+    let x = buf[i..i+8].try_into().map(u64::from_ne_bytes).unwrap();
+    let y = *(buf.as_ptr() as *const u64);
+    return y;
+}
+
 // // AHash is much faster than the default one, but slower than FxHash
-use ahash::AHasher;
-use ahash::AHashMap;
+// use ahash::AHasher;
+// use ahash::AHashMap;
 // fn new_hasher() -> AHasher { AHasher::new_with_keys(1234, 5678) }
 // type HMap<K,V> = AHashMap<K,V>;
 
@@ -390,8 +396,6 @@ struct Coalg {
 
 impl Coalg {
     fn new(data: Vec<u32>) -> Coalg {
-        // TODO: make backrefs more efficient by not inserting duplicates if state i refers to state j twice
-
         // Iterate over one state starting at data[loc], calling f(i) on each state ref @i in the state.
         #[inline]
         fn iter<F>(data: &[u32], loc: &mut usize, f : &mut F)
@@ -690,7 +694,6 @@ fn repartition(coa : &Coalg, states: &[State], ids: &[ID]) -> Vec<ID> {
     return renumber(&new_ids_raw);
 }
 
-#[inline]
 fn hash_with_op<A,F,H>(repr: &mut [(A,u64)], hasher: &mut H, op: F)
 where F : Fn(u64,u64) -> u64, A:Ord+Copy+Hash, H:Hasher {
     repr.sort_by_key(|kv| kv.0);
@@ -792,6 +795,74 @@ fn repartition_inexact(coa : &Coalg, states: &[State], ids: &[ID]) -> Vec<u64> {
         let loc = coa.locs[state as usize];
         let (sig,_rest) = canonicalize_inexact(&coa.data[loc..], ids);
         sigs.push(sig);
+    }
+    return sigs;
+}
+
+unsafe fn canonicalize_inexact_node_unsafe<'a>(mut data : *const u32, ids: &[ID], w: u32) -> (u64, *const u32) {
+    let typ = get_typ(w);
+    let tag = get_tag(w);
+    let len = get_len(w);
+    let mut hasher = new_hasher();
+    tag.hash(&mut hasher);
+    match typ {
+        LIST_TYP => {
+            for _ in 0..len {
+                let (sig, rest) = canonicalize_inexact_unsafe(data, ids);
+                sig.hash(&mut hasher);
+                data = rest;
+            }
+        },
+        SET_TYP => {
+            let mut repr: Vec<u64> = (0..len).map(|_| {
+                let (sig, rest) = canonicalize_inexact_unsafe(data, ids);
+                data = rest; sig
+            }).collect();
+            repr.sort_unstable();
+            repr.dedup();
+            repr.hash(&mut hasher);
+            // for &sig in repr.iter().dedup() { sig.hash(&mut hasher); }
+        },
+        ADD_TYP|MAX_TYP|OR_TYP => {
+            let mut repr: Vec<(u64,u64)> = (0..len).map(|_| {
+                let (sig, rest) = canonicalize_inexact_unsafe(data, ids);
+                let x1 = *rest;
+                let x2 = *rest.add(1);
+                data = rest.add(2);
+                let w = x1 as u64 | ((x2 as u64) << 32);
+                (sig,w)
+            }).collect();
+            match typ {
+                ADD_TYP => hash_with_op(&mut repr, &mut hasher, |a,b| a+b),
+                OR_TYP => hash_with_op(&mut repr, &mut hasher, |a,b| a|b),
+                MAX_TYP => hash_with_op(&mut repr, &mut hasher, |a,b| max(a,b)),
+                _ => panic!("Unreachable")
+            }
+        },
+        _ => panic!("Unknown typ.")
+    }
+    return (hasher.finish(), data);
+}
+
+unsafe fn canonicalize_inexact_unsafe<'a>(data : *const u32, ids: &[ID]) -> (u64, *const u32) {
+    let w = *data;
+    let data = data.add(1);
+    if is_state(w) {
+        return (ids[w as Loc] as u64, data);
+    } else {
+        return canonicalize_inexact_node_unsafe(data, ids, w);
+    }
+}
+
+fn repartition_inexact_unsafe(coa : &Coalg, states: &[State], ids: &[ID]) -> Vec<u64> {
+    let mut sigs = vec![];
+    sigs.reserve(states.len());
+    for &state in states {
+        let loc = coa.locs[state as usize];
+        unsafe {
+            let (sig,_rest) = canonicalize_inexact(&coa.data[loc..], ids);
+            sigs.push(sig);
+        }
     }
     return sigs;
 }
@@ -1092,6 +1163,21 @@ fn repartition_all_inexact(data: &[u32], ids: &[ID]) -> Vec<ID> {
     return renumber(&new_ids_raw)
 }
 
+fn repartition_all_inexact_unsafe(data: &[u32], ids: &[ID]) -> Vec<ID> {
+    unsafe {
+        let mut new_ids_raw = vec![];
+        new_ids_raw.reserve(ids.len());
+        let mut rest = data.as_ptr();
+        let end = rest.add(data.len());
+        while rest != end {
+                let (sig, rest_next) = canonicalize_inexact_unsafe(rest, ids);
+                new_ids_raw.push(sig);
+                rest = rest_next;
+        }
+        return renumber(&new_ids_raw)
+    }
+}
+
 fn count_states(data: &[u32]) -> usize {
     let mut n = 0;
     let mut loc = 0;
@@ -1194,7 +1280,7 @@ fn partref_naive(data: &[u32]) -> Vec<ID> {
     let mut ids = init_partition_ids(data);
     for iter in 0..1000000 {
         let start_time = SystemTime::now();
-        let new_ids = repartition_all_inexact(data, &ids);
+        let new_ids = repartition_all_inexact_unsafe(data, &ids);
         let iter_time = start_time.elapsed().unwrap();
 
         // debug iteration info
@@ -1388,7 +1474,7 @@ fn partref_nlogn_raw(data: Vec<u32>) -> Vec<ID> {
     while let Some(partition_id) = parts.worklist.pop() {
         let states = parts.refiners(partition_id);
         // println!("states = {:?}", states);
-        let signatures = renumber::<u64>(&repartition_inexact(&coa, states, &parts.partition_id));
+        let signatures = renumber::<u64>(&repartition_inexact_unsafe(&coa, states, &parts.partition_id));
         // println!("partition id = {:?}, partition = {:?}, states = {:?}, sigs = {:?}", partition_id, parts.partition[partition_id as usize], states, &signatures);
         let new_partitions = parts.refine(partition_id, &signatures);
         // println!("shrunk partition = {:?}, new partitions = {:?}, buffer = {:?}", parts.partition[partition_id as usize], &new_partitions.iter().map(|pid| parts.partition[*pid as usize]).collect::<Vec<(u32,u32,u32)>>(), &parts.buffer);
@@ -1484,8 +1570,8 @@ fn main() -> Result<(),()> {
     println!("Parsing done, size: {} in {} seconds", data.len(), parsing_time.as_secs_f32());
 
     start_time = SystemTime::now();
-    // let ids = partref_naive(&data);
-    let ids = partref_nlogn(data);
+    let ids = partref_naive(&data);
+    // let ids = partref_nlogn(data);
     println!("Number of states: {}, Number of partitions: {}", ids.len(), ids.iter().max().unwrap()+1);
     let computation_time = start_time.elapsed().unwrap();
     println!("Computation took {} seconds", computation_time.as_secs_f32());

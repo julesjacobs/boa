@@ -11,6 +11,7 @@ itertools = "0.8.0"
 ahash = "0.7.6"
 lexical = "6.1.0"
 fxhash = "0.2.1"
+byteorder = "1.4.3"
 
 [target.'cfg(not(target_env = "msvc"))'.dependencies]
 jemallocator = "0.3.2"

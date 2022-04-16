@@ -6,7 +6,10 @@ TODO:
 - Algorithm without backedges [done]
 - Try different Hasher and HashMap [done]
 - Optimize parser [done]
-- Hybrid algorithm
+- Write canonicalize_inexact with raw pointers [done]
+- Hybrid algorithm: keep using naive as long as number of partitions doubles every iteration
+- Make algorithm safe against hash collisions
+- New benchmarks
 - Select largest partition according to how many predecessors it has
 - Integrate renumber instead of building an intermediate vec
 - Optimize algorithm

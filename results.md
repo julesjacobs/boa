@@ -306,3 +306,86 @@ Number of states: 4459455, Number of partitions: 4459455
 Computation took 4.440344 seconds
 5.34user 0.41system 0:05.77elapsed 99%CPU (0avgtext+0avgdata 873436maxresident)k
 0inputs+0outputs (0major+227175minor)pagefaults 0swaps
+
+
+# unsafe
+Starting parsing benchmarks/large/wta_Word,or_0,0,0,4_47212500_50_944250_32.boa.txt...
+Parsing done, size: 284219250 in 3.63469 seconds
+Number of iterations: 1
+Number of states: 944250, Number of partitions: 944250
+Computation took 2.610657 seconds
+5.54user 0.74system 0:06.46elapsed 97%CPU (0avgtext+0avgdata 1252144maxresident)k
+0inputs+0outputs (0major+313169minor)pagefaults 0swaps
+
+Starting parsing benchmarks/large/wta_Z,max_0,0,0,4_50399500_50_1007990_32.boa.txt...
+Parsing done, size: 303404990 in 3.8978019 seconds
+Number of iterations: 1
+Number of states: 1007990, Number of partitions: 1007990
+Computation took 2.885907 seconds
+6.00user 0.77system 0:06.86elapsed 98%CPU (0avgtext+0avgdata 1328232maxresident)k
+0inputs+0outputs (0major+332191minor)pagefaults 0swaps
+
+Starting parsing benchmarks/large/wta_powerset_0,0,0,4_65000000_2_1300000_32.boa.txt...
+Parsing done, size: 261300000 in 4.86959 seconds
+Number of iterations: 2
+Number of states: 1300000, Number of partitions: 1300000
+Computation took 6.071471 seconds
+10.03user 0.90system 0:11.00elapsed 99%CPU (0avgtext+0avgdata 1117448maxresident)k
+0inputs+0outputs (0major+279495minor)pagefaults 0swaps
+
+Starting parsing benchmarks/wlan/wlan2_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_1632799_5456481_roundrobin_32.boa.txt...
+Parsing done, size: 13753169 in 0.18938 seconds
+Number of iterations: 186
+Number of states: 1632799, Number of partitions: 357456
+Computation took 25.236647 seconds
+25.06user 0.36system 0:25.43elapsed 99%CPU (0avgtext+0avgdata 121340maxresident)k
+0inputs+0outputs (0major+288459minor)pagefaults 0swaps
+
+Starting parsing benchmarks/fms/fms.sm_n=8_4459455_38533968_roundrobin_32.boa.txt...
+Parsing done, size: 120061359 in 1.361123 seconds
+Number of iterations: 7
+Number of states: 4459455, Number of partitions: 4459455
+Computation took 8.049303 seconds
+8.71user 0.72system 0:09.47elapsed 99%CPU (0avgtext+0avgdata 1007436maxresident)k
+0inputs+0outputs (0major+327100minor)pagefaults 0swaps
+
+# safe
+Starting parsing benchmarks/large/wta_Word,or_0,0,0,4_47212500_50_944250_32.boa.txt...
+Parsing done, size: 284219250 in 3.808344 seconds
+Number of iterations: 1
+Number of states: 944250, Number of partitions: 944250
+Computation took 2.813301 seconds
+5.94user 0.73system 0:06.91elapsed 96%CPU (0avgtext+0avgdata 1251664maxresident)k
+0inputs+0outputs (0major+313049minor)pagefaults 0swaps
+
+Starting parsing benchmarks/large/wta_Z,max_0,0,0,4_50399500_50_1007990_32.boa.txt...
+Parsing done, size: 303404990 in 3.920388 seconds
+Number of iterations: 1
+Number of states: 1007990, Number of partitions: 1007990
+Computation took 2.8842869 seconds
+6.12user 0.73system 0:06.88elapsed 99%CPU (0avgtext+0avgdata 1290308maxresident)k
+0inputs+0outputs (0major+322710minor)pagefaults 0swaps
+
+Starting parsing benchmarks/large/wta_powerset_0,0,0,4_65000000_2_1300000_32.boa.txt...
+Parsing done, size: 261300000 in 4.53133 seconds
+Number of iterations: 2
+Number of states: 1300000, Number of partitions: 1300000
+Computation took 5.50689 seconds
+9.27user 0.78system 0:10.11elapsed 99%CPU (0avgtext+0avgdata 1158332maxresident)k
+0inputs+0outputs (0major+289716minor)pagefaults 0swaps
+
+Starting parsing benchmarks/wlan/wlan2_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_1632799_5456481_roundrobin_32.boa.txt...
+Parsing done, size: 13753169 in 0.21053101 seconds
+Number of iterations: 186
+Number of states: 1632799, Number of partitions: 357456
+Computation took 26.238043 seconds
+26.09user 0.35system 0:26.45elapsed 99%CPU (0avgtext+0avgdata 112876maxresident)k
+0inputs+0outputs (0major+253470minor)pagefaults 0swaps
+
+Starting parsing benchmarks/fms/fms.sm_n=8_4459455_38533968_roundrobin_32.boa.txt...
+Parsing done, size: 120061359 in 1.355099 seconds
+Number of iterations: 7
+Number of states: 4459455, Number of partitions: 4459455
+Computation took 7.32517 seconds
+8.05user 0.66system 0:08.73elapsed 99%CPU (0avgtext+0avgdata 1023292maxresident)k
+0inputs+0outputs (0major+337009minor)pagefaults 0swaps
