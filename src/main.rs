@@ -1,6 +1,14 @@
 #![allow(dead_code)]
-use std::{hash::{Hash, Hasher}, fs::File, io::{BufReader, BufRead}, path::Path, cmp::max, time::SystemTime, env};
+use std::{hash::{Hash, Hasher}, fs::File, io::{BufReader, BufRead, BufWriter, Write, Read}, path::Path, cmp::max, time::SystemTime, env};
+use byteorder::{LittleEndian,WriteBytesExt, ReadBytesExt};
+use datasize::{DataSize, data_size};
 use itertools::Itertools;
+
+fn mb(num_bytes: usize) -> String {
+    let bytes_in_mb = ((1 as usize) << 20) as f64;
+    let num_mb = num_bytes as f64 / bytes_in_mb;
+    format!("{:.2} MB", num_mb)
+}
 
 //====================//
 // Hasher & allocator //
@@ -16,6 +24,7 @@ type HMap<K,V> = FxHashMap<K,V>;
 // I've found jemalloc to be better than mimalloc, both in terms of speed and memory use.
 #[cfg(not(target_env = "msvc"))]
 use jemallocator::Jemalloc;
+use memmap::MmapOptions;
 
 #[cfg(not(target_env = "msvc"))]
 #[global_allocator]
@@ -86,6 +95,7 @@ fn test_binary_representation() {
 // Dictionary compressed readers & writers //
 //=========================================//
 
+#[derive(DataSize)]
 struct CReader {
     headers: [u32;128],
     values: [u64;128],
@@ -121,6 +131,7 @@ impl CReader {
     }
 }
 
+#[derive(DataSize)]
 struct CWriter {
     headers_map: HMap<u32,u8>,
     values_map: HMap<u64,u8>,
@@ -469,6 +480,10 @@ fn test_node_read_write() {
 
 fn read_boa_txt<P>(filename: P) -> (Vec<u8>,CReader)
 where P: AsRef<Path>, {
+    let filename_str = filename.as_ref().display().to_string();
+    if !filename_str.ends_with(".boa.txt") {
+        panic!("File must be *.boa.txt, but is {}", filename_str);
+    }
     let file = File::open(&filename).
         expect(&format!("Couldn't open file {:?}", filename.as_ref().display().to_string()));
     let mut reader = BufReader::new(file);
@@ -482,18 +497,111 @@ where P: AsRef<Path>, {
     w.finish()
 }
 
+fn create_file<P>(filename: P) -> File
+where P: AsRef<Path>, {
+    if filename.as_ref().exists() { panic!("File already exists: {:?}", filename.as_ref().display().to_string()) }
+    let file = File::create(&filename).
+        expect(&format!("Couldn't create file {:?}", filename.as_ref().display().to_string()));
+    return file
+}
+
+fn write_boa_txt<P>(filename: P, data: &[u8], r: &CReader)
+where P: AsRef<Path>, {
+    let filename_str = filename.as_ref().display().to_string();
+    if !filename_str.ends_with(".boa.txt") {
+        panic!("File must be *.boa.txt, but is {}", filename_str);
+    }
+    let file = create_file(filename);
+    let mut writer = BufWriter::new(file);
+    let mut buf = vec![];
+    unsafe {
+        let mut p = data.as_ptr();
+        while !CReader::is_at_end(data, p) {
+            let node = Node::read(r, &mut p);
+            node.to_ascii(&mut buf);
+            if !CReader::is_at_end(data, p) { buf.push(b'\n') };
+            writer.write_all(&buf);
+            buf.clear();
+        }
+    }
+}
+
+fn read_boa<P>(filename: P) -> (Vec<u8>,CReader)
+where P: AsRef<Path>, {
+    let filename_str = filename.as_ref().display().to_string();
+    if !filename_str.ends_with(".boa") {
+        panic!("File must be *.boa, but is {}", filename_str);
+    }
+    let mut file = File::open(&filename).
+        expect(&format!("Couldn't open file {:?}", filename.as_ref().display().to_string()));
+    let mut r = CReader { headers: [0;128], values: [0;128] };
+    for i in 0..r.headers.len() {
+        r.headers[i] = file.read_u32::<LittleEndian>().expect("File reading error.");
+    }
+    for i in 0..r.values.len() {
+        r.values[i] = file.read_u64::<LittleEndian>().expect("File reading error.");
+    }
+    let mut data = vec![];
+    file.read_to_end(&mut data).expect("File reading error.");
+    return (data,r)
+}
+
+
+fn write_boa<P>(filename: P, data: &[u8], r: &CReader)
+where P: AsRef<Path>, {
+    let filename_str = filename.as_ref().display().to_string();
+    if !filename_str.ends_with(".boa") {
+        panic!("File must be *.boa, but is {}", filename_str);
+    }
+    let file = create_file(filename);
+    let mut writer = BufWriter::new(file);
+    for header in r.headers {
+        writer.write_u32::<LittleEndian>(header).expect("Writing error.");
+    }
+    for value in r.values {
+        writer.write_u64::<LittleEndian>(value).expect("Writing error.");;
+    }
+    writer.write_all(data).expect("Writing error.");;
+}
+
+fn convert_file(filename: &str) {
+    if filename.ends_with(".boa") {
+        let new_filename = [&filename[0..filename.len()-4],".boa.txt"].concat();
+        let (data,r) = read_boa(filename);
+        write_boa_txt(new_filename, &data, &r);
+    } else if filename.ends_with(".boa.txt") {
+        let new_filename = [&filename[0..filename.len()-8],".boa"].concat();
+        let (data,r) = read_boa_txt(filename);
+        write_boa(new_filename, &data, &r);
+    } else {
+        panic!("Unknown file type: {}", filename)
+    }
+}
+
+#[test]
+fn test_convert_file() {
+    std::fs::remove_file("tests/test1_converted.boa.txt").unwrap();
+    std::fs::remove_file("tests/test1.boa").unwrap();
+    convert_file("tests/test1_converted.boa");
+    convert_file("tests/test1.boa.txt");
+}
 
 //======================//
 // Partition refinement //
 //======================//
 
+fn ptrvec_datasize(v: &Vec<*const u8>) -> usize { v.len() * 8 }
+
+#[derive(DataSize)]
 struct Coalg {
     data: Vec<u8>, // binary representation of the coalgebra
     reader: CReader,
+    #[data_size(with = ptrvec_datasize)]
     locs: Vec<*const u8>, // gives the location in data where the i-th state starts
     backrefs: Vec<u32>, // buffer of backrefs
     backrefs_locs: Vec<u32> // backrefs_locs[i] gives the index into backrefs[backrefs_locs[i]] where the backrefs of the i-th state start
 }
+
 
 impl Coalg {
     fn new(data: Vec<u8>, r: CReader) -> Coalg {
@@ -1038,16 +1146,16 @@ fn init_partition_ids_unsafe(data: &[u8], r: &CReader) -> Vec<ID> {
 
 fn partref_naive(data: &[u8], r: &CReader) -> Vec<ID> {
     let mut ids = init_partition_ids_unsafe(data, r);
-    for iter in 0..1000000 {
-        let start_time = SystemTime::now();
+    for iter in 0..99999999 {
+        // let start_time = SystemTime::now();
         let new_ids = repartition_all_inexact_unsafe(data, r, &ids);
-        let iter_time = start_time.elapsed().unwrap();
+        // let iter_time = start_time.elapsed().unwrap();
 
         // debug iteration info
-        let mut new_ids2 = new_ids.clone();
-        new_ids2.sort_unstable();
-        new_ids2.dedup();
-        let num_parts = new_ids2.len();
+        // let mut new_ids2 = new_ids.clone();
+        // new_ids2.sort_unstable();
+        // new_ids2.dedup();
+        // let num_parts = new_ids2.len();
         // println!("- Iteration {}, number of partitions: {} (refinement time = {} seconds)", iter, num_parts, iter_time.as_secs_f32());
         // end debug info
 
@@ -1074,7 +1182,7 @@ fn renumber<A> (ids: &[A]) -> Vec<u32>
 where A:Hash+Eq {
     let mut canon_map = HMap::default();
     let mut last_id = 0;
-    return ids.iter().map(|id| {
+    let res = ids.iter().map(|id| {
         if canon_map.contains_key(&id) {
             canon_map[&id]
         } else {
@@ -1083,6 +1191,8 @@ where A:Hash+Eq {
             last_id - 1
         }
     }).collect();
+    // println!("Canon map size: {}", data_size(&canon_map));
+    return res;
 }
 
 fn cumsum_mut(xs: &mut [u32]) {
@@ -1149,6 +1259,9 @@ fn test_index_of_max() {
     assert_eq!(index_of_max(&vec![0,3,1,2,3,4,3]), 5);
 }
 
+type State = u32;
+
+#[derive(DataSize)]
 struct DirtyPartitions {
     buffer: Vec<State>, // buffer of states (partitioned)
     position: Vec<u32>, // position of each state in partition array
@@ -1267,10 +1380,10 @@ impl DirtyPartitions {
     }
 }
 
-fn partref_nlogn_raw(data: Vec<u32>) -> Vec<ID> {
+fn partref_nlogn_raw(data: Vec<u8>, r: CReader) -> Vec<ID> {
     // println!("===================== Starting partref_nlogn");
     // panic!("Stopped");
-    let coa = Coalg::new(data);
+    let coa = Coalg::new(data, r);
     // coa.dump();
     // coa.dump_backrefs();
     let mut iters = 0;
@@ -1295,15 +1408,27 @@ fn partref_nlogn_raw(data: Vec<u32>) -> Vec<ID> {
             }
         }
         iters += 1;
-        // if iters > 47730 { panic!("Stop!") }
     }
     println!("Number of iterations: {} ", iters);
+    println!("DirtyPartitions size: {}, Coalg size: {}", mb(data_size(&parts)), mb(data_size(&coa)));
+    println!("Coalg sizes {{ \n  data: {}, \n  reader: {}, \n  locs: {}, \n  backrefs: {}, \n  backrefs_locs: {} \n}}",
+        mb(data_size(&coa.data)), mb(data_size(&coa.reader)), mb(&coa.locs.len()*8), mb(data_size(&coa.backrefs)), mb(data_size(&coa.backrefs_locs)));
+
+    // struct Coalg {
+    //     data: Vec<u8>, // binary representation of the coalgebra
+    //     reader: CReader,
+    //     #[data_size(with = ptrvec_datasize)]
+    //     locs: Vec<*const u8>, // gives the location in data where the i-th state starts
+    //     backrefs: Vec<u32>, // buffer of backrefs
+    //     backrefs_locs: Vec<u32> // backrefs_locs[i] gives the index into backrefs[backrefs_locs[i]] where the backrefs of the i-th state start
+    // }
+
     // println!("===================== Ending partref_nlogn");
     return parts.partition_id;
 }
 
-fn partref_nlogn(data: Vec<u32>) -> Vec<ID> {
-    let ids = partref_nlogn_raw(data);
+fn partref_nlogn(data: Vec<u8>, r: CReader) -> Vec<ID> {
+    let ids = partref_nlogn_raw(data, r);
     return renumber(&ids);
 }
 
@@ -1319,24 +1444,24 @@ fn test_partref_nlogn() {
     // Add[0]{@0:2,@1:1}
     let (data,r) = read_boa_txt("tests/test1.boa.txt");
     let ids1 = partref_naive(&data, &r);
-    let ids2 = partref_nlogn(data, &r);
+    let ids2 = partref_nlogn(data, r);
     assert_eq!(&ids1, &ids2);
 
-    let data = read_boa_txt("tests/test2.boa.txt");
-    let ids = partref_nlogn(data);
+    let (data,r) = read_boa_txt("tests/test2.boa.txt");
+    let ids = partref_nlogn(data, r);
     assert_eq!(&ids, &vec![0,1,2,3,4,5]);
 }
 
 #[test]
 fn test_partref_wlan() {
     let filename = "benchmarks/small/wlan0_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_582327_771088_roundrobin_4.boa.txt";
-    let data = read_boa_txt(&filename);
-    let ids = partref_nlogn(data);
+    let (data,r) = read_boa_txt(&filename);
+    let ids = partref_nlogn(data, r);
     assert_eq!(*ids.iter().max().unwrap(), 107864);
 
     let filename = "benchmarks/wlan/wlan1_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_1408676_1963522_roundrobin_32.boa.txt";
-    let data = read_boa_txt(&filename);
-    let ids = partref_nlogn(data);
+    let (data, r) = read_boa_txt(&filename);
+    let ids = partref_nlogn(data, r);
     assert_eq!(*ids.iter().max().unwrap(), 243324);
 
     // let filename = "benchmarks/small/wlan0_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_582327_771088_roundrobin_4.boa.txt";
@@ -1350,49 +1475,49 @@ fn test_partref_wlan() {
     // assert_eq!(*ids.iter().max().unwrap(), 243324);
 }
 
-fn main() -> Result<(),()> {
-    let args:Vec<String> = env::args().collect();
-    // println!("args: {:?}", &args);
+use clap::{Parser, ArgEnum};
 
-    // let filename = "tests/test1.boa.txt";
-    // let filename = "benchmarks/wlan/wlan0_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_582327_771088_roundrobin_32.boa.txt";
-    // let filename = "benchmarks/fms/fms.sm_n=4_35910_237120_roundrobin_32.boa.txt";
-    // let filename = "benchmarks/small/wlan0_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_582327_771088_roundrobin_4.boa.txt"; // 248502 106472
-    // let filename = "benchmarks/fms/fms.sm_n=8_4459455_38533968_roundrobin_32.boa.txt";
-    // let filename = "benchmarks/wlan/wlan2_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_1632799_5456481_roundrobin_32.boa.txt";
-    let filename = "benchmarks/large/wta_powerset_0,0,0,4_65000000_2_1300000_32.boa.txt";
-    // let filename = "benchmarks/large/wta_Z,max_0,0,0,4_50399500_50_1007990_32.boa.txt";
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ArgEnum)]
+enum Action {
+    Convert,
+    Naive,
+    Nlogn,
+}
 
-    let filename =
-        if args.len() > 1 { &args[1] }
-        else { filename };
+#[derive(Parser,Debug)]
+#[clap(author, version, about, long_about = None)]
+struct Args {
+    #[clap(arg_enum)]
+    action: Action,
 
-    let mut start_time = SystemTime::now();
-    println!("Starting parsing {}... ", filename);
-    let (data,r) = read_boa_txt(filename);
-    let parsing_time = start_time.elapsed().unwrap();
-    println!("Parsing done, size: {} in {} seconds", data.len(), parsing_time.as_secs_f32());
+    file: String,
+}
 
-    start_time = SystemTime::now();
-    let ids = partref_naive(&data, &r);
-    // let ids = partref_nlogn(data);
-    println!("Number of states: {}, Number of partitions: {}", ids.len(), ids.iter().max().unwrap()+1);
-    let computation_time = start_time.elapsed().unwrap();
-    println!("Computation took {} seconds", computation_time.as_secs_f32());
-
-    // let coa = Coalg::new(data);
-    // println!("Number of states: {}", coa.num_states());
-
-    // let mut i = 0;
-    // for id in ids {
-    //     println!("{}: {}", i, id);
-    //     i += 1;
-    // }
-    // for file_res in glob::glob("benchmarks/*/*.boa.txt").unwrap() {
-    //     let file = file_res.unwrap();
-    //     let data = read_boa_txt(&file);
-    //     println!("{:?}: {} Mb", file, (data.len()*4) as f64 / 1_000_000.0);
-    // }
-
-    Ok(())
+fn main() {
+    let args = Args::parse();
+    match args.action {
+        Action::Convert => {
+            println!("Converting {}...", &args.file);
+            convert_file(&args.file);
+            println!("Converted {}.", &args.file);
+        },
+        Action::Naive|Action::Nlogn => {
+            let mut start_time = SystemTime::now();
+            println!("Starting parsing {}... ", &args.file);
+            let (data,r) = read_boa(&args.file);
+            let parsing_time = start_time.elapsed().unwrap();
+            println!("Parsing done, size: {} in {} seconds", mb(data.len()), parsing_time.as_secs_f32());
+            start_time = SystemTime::now();
+            let ids = if args.action == Action::Naive {
+                println!("Naive algorithm.");
+                partref_naive(&data, &r)
+            } else {
+                println!("N log N algorithm.");
+                partref_nlogn(data, r)
+            };
+            println!("Number of states: {}, Number of partitions: {}", ids.len(), ids.iter().max().unwrap()+1);
+            let computation_time = start_time.elapsed().unwrap();
+            println!("Computation took {} seconds", computation_time.as_secs_f32());
+        },
+    }
 }
