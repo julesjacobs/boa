@@ -1069,52 +1069,6 @@ fn test_partref_naive() {
     assert_eq!(&ids, &vec![0,0,1,1,2,3,3,4]);
 }
 
-// fn skip_state(data: &[u32], loc: &mut usize) {
-//     let w = data[*loc];
-//     if is_state(w) {
-//         *loc += 1;
-//     } else {
-//         let typ = get_typ(w);
-//         let len = get_len(w);
-//         *loc += 1;
-//         match typ {
-//             LIST_TYP|SET_TYP => {
-//                 for _ in 0..len {
-//                     skip_state(data,loc)
-//                 }
-//             },
-//             ADD_TYP|MAX_TYP|OR_TYP => {
-//                 for _ in 0..len {
-//                     skip_state(data,loc);
-//                     *loc += 2;
-//                 }
-//             },
-//             _ => {
-//                 panic!("Unknown typ.")
-//             }
-//         }
-//     }
-// }
-
-// /// Compute the starting index of each state
-// fn all_locs(data: &[u32]) -> Vec<usize> {
-//     let mut locs = vec![];
-//     let mut loc = 0;
-//     while loc < data.len() {
-//         locs.push(loc);
-//         skip_state(data, &mut loc);
-//     }
-//     return locs
-// }
-
-// #[test]
-// fn test_repartition_all() {
-//     let data = read_boa_txt("tests/test1.boa.txt");
-//     let ids = repartition_all_inexact(&data, &vec![0,0,0,0,0,0,0,0]);
-//     assert_eq!(&ids, &vec![0,0,1,1,1,2,2,3]);
-//     let ids = repartition_all(&data, &vec![0,0,0,0,0,0,0,0]);
-//     assert_eq!(&ids, &vec![0,0,1,1,1,2,2,3]);
-// }
 
 fn renumber<A> (ids: &[A]) -> Vec<u32>
 where A:Hash+Eq {
@@ -1159,367 +1113,242 @@ fn test_cumsum() {
 }
 
 
-// fn repartition_all(data: &[u32], ids: &[ID]) -> Vec<ID> {
-//     let mut tables = Tables {
-//         last_id: 0,
-//         coll_table: HMap::default(),
-//         mon_table: HMap::default()
-//     };
-//     let mut new_ids_raw = vec![];
-//     let mut loc_mut = 0;
-//     while loc_mut < data.len() {
-//         new_ids_raw.push(canonicalize(data, ids, &mut loc_mut, &mut tables));
-//     }
-//     return renumber(&new_ids_raw)
-// }
+fn counts_vec(xs: &[u32]) -> Vec<u32> {
+    let mut counts = vec![];
+    for &x in xs {
+        while x as usize >= counts.len() { counts.push(0); }
+        counts[x as usize] += 1;
+    }
+    return counts;
+}
 
-// fn repartition_all_inexact(data: &[u32], ids: &[ID]) -> Vec<ID> {
-//     let mut new_ids_raw = vec![];
-//     new_ids_raw.reserve(ids.len());
-//     let mut rest = data;
-//     while rest.len() > 0 {
-//         let (sig, rest_next) = canonicalize_inexact(rest, ids);
-//         new_ids_raw.push(sig);
-//         rest = rest_next;
-//     }
-//     return renumber(&new_ids_raw)
-// }
+#[test]
+fn test_counts_vec() {
+    let counts = counts_vec(&vec![0,0,1,1,3,4,5,5,5]);
+    assert_eq!(counts[0],2);
+    assert_eq!(counts[1],2);
+    assert_eq!(counts[3],1);
+    assert_eq!(counts[4],1);
+    assert_eq!(counts[5],3);
+}
 
+fn index_of_max(counts: &[u32]) -> usize {
+    let mut i_max = usize::MAX;
+    let mut v_max = 0;
+    for i in 0..counts.len() {
+        if counts[i] >= v_max {
+            i_max = i;
+            v_max = counts[i];
+        }
+    }
+    return i_max
+}
 
-// fn count_states(data: &[u32]) -> usize {
-//     let mut n = 0;
-//     let mut loc = 0;
-//     while loc < data.len() {
-//         n += 1;
-//         skip_state(data, &mut loc);
-//     }
-//     return n
-// }
+#[test]
+fn test_index_of_max() {
+    assert_eq!(index_of_max(&vec![0,3,1,2,3,4,3]), 5);
+}
 
-// fn canonicalize_inexact_node_init<'a>(mut data : &'a [u32], w: u32) -> (u64, &'a [u32]) {
-//     let typ = get_typ(w);
-//     let tag = get_tag(w);
-//     let len = get_len(w);
-//     let mut hasher = new_hasher();
-//     tag.hash(&mut hasher);
-//     match typ {
-//         LIST_TYP => {
-//             for _ in 0..len {
-//                 let (sig, rest) = canonicalize_inexact_init(data);
-//                 sig.hash(&mut hasher);
-//                 data = rest;
-//             }
-//         },
-//         SET_TYP => {
-//             let mut repr: Vec<u64> = (0..len).map(|_| {
-//                 let (sig, rest) = canonicalize_inexact_init(data);
-//                 data = rest; sig
-//             }).collect();
-//             repr.sort_unstable();
-//             repr.dedup();
-//             repr.hash(&mut hasher);
-//             // for &sig in repr.iter().dedup() { sig.hash(&mut hasher); }
-//         },
-//         ADD_TYP => {
-//             let mut repr: Vec<(u64,u64)> = (0..len).map(|_| {
-//                 let (sig, rest) = canonicalize_inexact_init(data);
-//                 let x1 = rest[0];
-//                 let x2 = rest[1];
-//                 data = &rest[2..];
-//                 let w = x1 as u64 | ((x2 as u64) << 32);
-//                 (sig,w)
-//             }).collect();
-//             hash_with_op(&mut repr, &mut hasher, |a,b| a+b);
-//         },
-//         MAX_TYP => {
-//             let mut repr: Vec<(u64,u64)> = (0..len).map(|_| {
-//                 let (sig, rest) = canonicalize_inexact_init(data);
-//                 let x1 = rest[0];
-//                 let x2 = rest[1];
-//                 data = &rest[2..];
-//                 let w = x1 as u64 | ((x2 as u64) << 32);
-//                 (sig,w)
-//             }).collect();
-//             hash_with_op(&mut repr, &mut hasher, |a,b| max(a,b));
-//         },
-//         OR_TYP => {
-//             let mut repr: Vec<(u64,u64)> = (0..len).map(|_| {
-//                 let (sig, rest) = canonicalize_inexact_init(data);
-//                 let x1 = rest[0];
-//                 let x2 = rest[1];
-//                 data = &rest[2..];
-//                 let w = x1 as u64 | ((x2 as u64) << 32);
-//                 (sig,w)
-//             }).collect();
-//             hash_with_op(&mut repr, &mut hasher, |a,b| a|b);
-//         },
-//         _ => {
-//             panic!("Unknown typ.")
-//         }
-//     }
-//     return (hasher.finish(), data);
-// }
+struct DirtyPartitions {
+    buffer: Vec<State>, // buffer of states (partitioned)
+    position: Vec<u32>, // position of each state in partition array
+    partition_id: Vec<ID>, // partition of each state
+    partition: Vec<(u32,u32,u32)>, // vector of partitions (start, mid, end) where the states in start..mid are mid and mid..end are clean
+    worklist: Vec<u32>, // worklist of partitions
+}
 
-// #[inline]
-// fn canonicalize_inexact_init<'a>(data : &'a [u32]) -> (u64, &'a [u32]) {
-//     let w = data[0];
-//     let data = &data[1..];
-//     if is_state(w) {
-//         return (0, data);
-//     } else {
-//         return canonicalize_inexact_node_init(data, w);
-//     }
-// }
+impl DirtyPartitions {
+    fn new(num_states: u32) -> DirtyPartitions {
+        DirtyPartitions {
+            buffer: (0..num_states).collect(),
+            position: (0..num_states).collect(),
+            partition_id: vec![0;num_states as usize],
+            partition: vec![(0, 0, num_states)], // for partition (start, mid, end), the states start..mid are clean and mid..end are dirty
+            worklist: vec![0]
+        }
+    }
 
-// fn init_partition_ids(data: &[u32]) -> Vec<u32> {
-//     let mut new_ids_raw = vec![];
-//     let mut rest = data;
-//     while rest.len() > 0 {
-//         let (sig, rest_next) = canonicalize_inexact_init(rest);
-//         new_ids_raw.push(sig);
-//         rest = rest_next;
-//     }
-//     return renumber(&new_ids_raw)
-// }
+    /// Mark the state as dirty, putting its partition on the worklist if necessary
+    /// Time complexity: O(1)
+    fn mark_dirty(self: &mut DirtyPartitions, state: State) {
+        let id = self.partition_id[state as usize];
+        let pos = self.position[state as usize];
+        let (start, mid, end) = self.partition[id as usize];
+        // println!("mark_dirty(_,{}): id={}, pos={}, part={:?}", state, id, pos, (start,mid,end));
+        if end - start <= 1 { return } // don't need to mark states dirty if they are in a singleton partition
+        if mid <= pos { // state is already dirty
+            return
+        }
+        if mid == end { // no dirty states in partition yet, so put it onto worklist
+            self.worklist.push(id)
+        }
+        self.partition[id as usize].1 -= 1; // decrement the dirty states marker to make space
+        let other_state = self.buffer[mid as usize - 1]; // the state that we will swap
+        self.position[other_state as usize] = pos;
+        self.position[state as usize] = mid;
+        self.buffer[pos as usize] = other_state;
+        self.buffer[mid as usize - 1] = state;
+    }
 
+    /// Determine slice of states to compute signatures for.
+    /// Includes one clean state at the start if there are any clean states.
+    /// Time complexity: O(1)
+    fn refiners(self: &DirtyPartitions, id: ID) -> &[State] {
+        let (start, mid, end) = self.partition[id as usize];
+        if start == mid { // no clean states
+            return &self.buffer[start as usize..end as usize]
+        } else { // there are clean states
+            return &self.buffer[(mid-1) as usize..end as usize]
+        }
+    }
 
+    /// Time complexity: O(signatures.len())
+    /// Returns vector of new partition ids
+    /// Signatures are assumed to be 0..n with the first starting with 0
+    fn refine(self: &mut DirtyPartitions, partition_id: ID, signatures: &[u32]) -> Vec<u32> {
+        // let signatures = renumber(signatures); // Renumber signatures to be 0..n. This makes the sig of the clean states 0 if there are any.
 
-// fn counts_vec(xs: &[u32]) -> Vec<u32> {
-//     let mut counts = vec![];
-//     for &x in xs {
-//         while x as usize >= counts.len() { counts.push(0); }
-//         counts[x as usize] += 1;
-//     }
-//     return counts;
-// }
+        // compute the occurrence counts of each of the signatures
+        let mut counts = counts_vec(&signatures);
+        let (start,mid,end) = self.partition[partition_id as usize];
+        if start < mid { counts[0] += mid - start - 1 } // add count of clean part
 
-// #[test]
-// fn test_counts_vec() {
-//     let counts = counts_vec(&vec![0,0,1,1,3,4,5,5,5]);
-//     assert_eq!(counts[0],2);
-//     assert_eq!(counts[1],2);
-//     assert_eq!(counts[3],1);
-//     assert_eq!(counts[4],1);
-//     assert_eq!(counts[5],3);
-// }
+        // sort the relevant part of self.buffer by signature
+        // also restores invariant for self.position and self.partition_id
+        let largest_partition = index_of_max(&counts) as u32;
+        let next_available_partition_id = self.partition.len() as u32;
 
-// fn index_of_max(counts: &[u32]) -> usize {
-//     let mut i_max = usize::MAX;
-//     let mut v_max = 0;
-//     for i in 0..counts.len() {
-//         if counts[i] >= v_max {
-//             i_max = i;
-//             v_max = counts[i];
-//         }
-//     }
-//     return i_max
-// }
+        let mut cum_counts = cumsum(&counts);
+        let original_states = self.refiners(partition_id).to_vec();
+        for i in 0..original_states.len() {
+            let sig = signatures[i];
+            let state = original_states[i];
+            cum_counts[sig as usize] -= 1;
+            let j = start+cum_counts[sig as usize];
+            self.buffer[j as usize] = state;
+            self.position[state as usize] = j;
 
-// #[test]
-// fn test_index_of_max() {
-//     assert_eq!(index_of_max(&vec![0,3,1,2,3,4,3]), 5);
-// }
+            if sig != largest_partition {
+                let new_sig = next_available_partition_id + if sig < largest_partition { sig } else { sig - 1 };
+                self.partition_id[state as usize] = new_sig;
+            }
+        }
 
-// struct DirtyPartitions {
-//     buffer: Vec<State>, // buffer of states (partitioned)
-//     position: Vec<u32>, // position of each state in partition array
-//     partition_id: Vec<ID>, // partition of each state
-//     partition: Vec<(u32,u32,u32)>, // vector of partitions (start, mid, end) where the states in start..mid are mid and mid..end are clean
-//     worklist: Vec<u32>, // worklist of partitions
-// }
+        if largest_partition != 0 {
+            // need to relabel the clean states
+            for i in start..mid {
+                let state = self.buffer[i as usize];
+                self.partition_id[state as usize] = next_available_partition_id;
+            }
+        }
 
-// impl DirtyPartitions {
-//     fn new(num_states: u32) -> DirtyPartitions {
-//         DirtyPartitions {
-//             buffer: (0..num_states).collect(),
-//             position: (0..num_states).collect(),
-//             partition_id: vec![0;num_states as usize],
-//             partition: vec![(0, 0, num_states)], // for partition (start, mid, end), the states start..mid are clean and mid..end are dirty
-//             worklist: vec![0]
-//         }
-//     }
-
-//     /// Mark the state as dirty, putting its partition on the worklist if necessary
-//     /// Time complexity: O(1)
-//     fn mark_dirty(self: &mut DirtyPartitions, state: State) {
-//         let id = self.partition_id[state as usize];
-//         let pos = self.position[state as usize];
-//         let (start, mid, end) = self.partition[id as usize];
-//         // println!("mark_dirty(_,{}): id={}, pos={}, part={:?}", state, id, pos, (start,mid,end));
-//         if end - start <= 1 { return } // don't need to mark states dirty if they are in a singleton partition
-//         if mid <= pos { // state is already dirty
-//             return
-//         }
-//         if mid == end { // no dirty states in partition yet, so put it onto worklist
-//             self.worklist.push(id)
-//         }
-//         self.partition[id as usize].1 -= 1; // decrement the dirty states marker to make space
-//         let other_state = self.buffer[mid as usize - 1]; // the state that we will swap
-//         self.position[other_state as usize] = pos;
-//         self.position[state as usize] = mid;
-//         self.buffer[pos as usize] = other_state;
-//         self.buffer[mid as usize - 1] = state;
-//     }
-
-//     /// Determine slice of states to compute signatures for.
-//     /// Includes one clean state at the start if there are any clean states.
-//     /// Time complexity: O(1)
-//     fn refiners(self: &DirtyPartitions, id: ID) -> &[State] {
-//         let (start, mid, end) = self.partition[id as usize];
-//         if start == mid { // no clean states
-//             return &self.buffer[start as usize..end as usize]
-//         } else { // there are clean states
-//             return &self.buffer[(mid-1) as usize..end as usize]
-//         }
-//     }
-
-//     /// Time complexity: O(signatures.len())
-//     /// Returns vector of new partition ids
-//     /// Signatures are assumed to be 0..n with the first starting with 0
-//     fn refine(self: &mut DirtyPartitions, partition_id: ID, signatures: &[u32]) -> Vec<u32> {
-//         // let signatures = renumber(signatures); // Renumber signatures to be 0..n. This makes the sig of the clean states 0 if there are any.
-
-//         // compute the occurrence counts of each of the signatures
-//         let mut counts = counts_vec(&signatures);
-//         let (start,mid,end) = self.partition[partition_id as usize];
-//         if start < mid { counts[0] += mid - start - 1 } // add count of clean part
-
-//         // sort the relevant part of self.buffer by signature
-//         // also restores invariant for self.position and self.partition_id
-//         let largest_partition = index_of_max(&counts) as u32;
-//         let next_available_partition_id = self.partition.len() as u32;
-
-//         let mut cum_counts = cumsum(&counts);
-//         let original_states = self.refiners(partition_id).to_vec();
-//         for i in 0..original_states.len() {
-//             let sig = signatures[i];
-//             let state = original_states[i];
-//             cum_counts[sig as usize] -= 1;
-//             let j = start+cum_counts[sig as usize];
-//             self.buffer[j as usize] = state;
-//             self.position[state as usize] = j;
-
-//             if sig != largest_partition {
-//                 let new_sig = next_available_partition_id + if sig < largest_partition { sig } else { sig - 1 };
-//                 self.partition_id[state as usize] = new_sig;
-//             }
-//         }
-
-//         if largest_partition != 0 {
-//             // need to relabel the clean states
-//             for i in start..mid {
-//                 let state = self.buffer[i as usize];
-//                 self.partition_id[state as usize] = next_available_partition_id;
-//             }
-//         }
-
-//         if start < mid { cum_counts[0] -= mid - start - 1 }
-//         debug_assert_eq!(cum_counts[0],0);
-//         debug_assert_eq!(cum_counts[cum_counts.len()-1] + counts[counts.len()-1], end - start);
+        if start < mid { cum_counts[0] -= mid - start - 1 }
+        debug_assert_eq!(cum_counts[0],0);
+        debug_assert_eq!(cum_counts[cum_counts.len()-1] + counts[counts.len()-1], end - start);
 
 
-//         // we will return vector of the new partitions
-//         let mut new_partitions: Vec<u32> = vec![];
+        // we will return vector of the new partitions
+        let mut new_partitions: Vec<u32> = vec![];
 
-//         // restore invariant of self.partition
-//         for sig in 0..counts.len() as u32 {
-//             let new_start = start+cum_counts[sig as usize];
-//             let new_end = start+cum_counts[sig as usize]+counts[sig as usize];
-//             let new_part = (new_start, new_end, new_end); // all states are clean now (but may be marked dirty later)
-//             if sig == largest_partition {
-//                 self.partition[partition_id as usize] = new_part;
-//             } else {
-//                 new_partitions.push(self.partition.len() as u32);
-//                 self.partition.push(new_part);
-//             }
-//         }
+        // restore invariant of self.partition
+        for sig in 0..counts.len() as u32 {
+            let new_start = start+cum_counts[sig as usize];
+            let new_end = start+cum_counts[sig as usize]+counts[sig as usize];
+            let new_part = (new_start, new_end, new_end); // all states are clean now (but may be marked dirty later)
+            if sig == largest_partition {
+                self.partition[partition_id as usize] = new_part;
+            } else {
+                new_partitions.push(self.partition.len() as u32);
+                self.partition.push(new_part);
+            }
+        }
 
-//         return new_partitions;
-//     }
-// }
+        return new_partitions;
+    }
+}
 
-// fn partref_nlogn_raw(data: Vec<u32>) -> Vec<ID> {
-//     // println!("===================== Starting partref_nlogn");
-//     // panic!("Stopped");
-//     let coa = Coalg::new(data);
-//     // coa.dump();
-//     // coa.dump_backrefs();
-//     let mut iters = 0;
-//     let mut parts = DirtyPartitions::new(coa.num_states());
-//     while let Some(partition_id) = parts.worklist.pop() {
-//         let states = parts.refiners(partition_id);
-//         // println!("states = {:?}", states);
-//         let signatures = renumber::<u64>(&repartition_inexact_unsafe(&coa, states, &parts.partition_id));
-//         // println!("partition id = {:?}, partition = {:?}, states = {:?}, sigs = {:?}", partition_id, parts.partition[partition_id as usize], states, &signatures);
-//         let new_partitions = parts.refine(partition_id, &signatures);
-//         // println!("shrunk partition = {:?}, new partitions = {:?}, buffer = {:?}", parts.partition[partition_id as usize], &new_partitions.iter().map(|pid| parts.partition[*pid as usize]).collect::<Vec<(u32,u32,u32)>>(), &parts.buffer);
-//         for new_partition_id in new_partitions {
-//             // mark dirty all predecessors of states in this partition
-//             // let part_debug = parts.partition[new_partition_id as usize];
-//             let (start,_, end) = parts.partition[new_partition_id as usize];
-//             let states = parts.buffer[start as usize..end as usize].to_vec();
-//             for state in states {
-//                 for &state2 in coa.state_backrefs(state) {
-//                     // println!("state {} marks state {} as dirty (new partition: {:?} id: {})", state, state2, &part_debug, new_partition_id);
-//                     parts.mark_dirty(state2);
-//                 }
-//             }
-//         }
-//         iters += 1;
-//         // if iters > 47730 { panic!("Stop!") }
-//     }
-//     println!("Number of iterations: {} ", iters);
-//     // println!("===================== Ending partref_nlogn");
-//     return parts.partition_id;
-// }
+fn partref_nlogn_raw(data: Vec<u32>) -> Vec<ID> {
+    // println!("===================== Starting partref_nlogn");
+    // panic!("Stopped");
+    let coa = Coalg::new(data);
+    // coa.dump();
+    // coa.dump_backrefs();
+    let mut iters = 0;
+    let mut parts = DirtyPartitions::new(coa.num_states());
+    while let Some(partition_id) = parts.worklist.pop() {
+        let states = parts.refiners(partition_id);
+        // println!("states = {:?}", states);
+        let signatures = renumber::<u64>(&repartition_inexact_unsafe(&coa, states, &parts.partition_id));
+        // println!("partition id = {:?}, partition = {:?}, states = {:?}, sigs = {:?}", partition_id, parts.partition[partition_id as usize], states, &signatures);
+        let new_partitions = parts.refine(partition_id, &signatures);
+        // println!("shrunk partition = {:?}, new partitions = {:?}, buffer = {:?}", parts.partition[partition_id as usize], &new_partitions.iter().map(|pid| parts.partition[*pid as usize]).collect::<Vec<(u32,u32,u32)>>(), &parts.buffer);
+        for new_partition_id in new_partitions {
+            // mark dirty all predecessors of states in this partition
+            // let part_debug = parts.partition[new_partition_id as usize];
+            let (start,_, end) = parts.partition[new_partition_id as usize];
+            let states = parts.buffer[start as usize..end as usize].to_vec();
+            for state in states {
+                for &state2 in coa.state_backrefs(state) {
+                    // println!("state {} marks state {} as dirty (new partition: {:?} id: {})", state, state2, &part_debug, new_partition_id);
+                    parts.mark_dirty(state2);
+                }
+            }
+        }
+        iters += 1;
+        // if iters > 47730 { panic!("Stop!") }
+    }
+    println!("Number of iterations: {} ", iters);
+    // println!("===================== Ending partref_nlogn");
+    return parts.partition_id;
+}
 
-// fn partref_nlogn(data: Vec<u32>) -> Vec<ID> {
-//     let ids = partref_nlogn_raw(data);
-//     return renumber(&ids);
-// }
+fn partref_nlogn(data: Vec<u32>) -> Vec<ID> {
+    let ids = partref_nlogn_raw(data);
+    return renumber(&ids);
+}
 
-// #[test]
-// fn test_partref_nlogn() {
-//     // List[0]{@0,@1}
-//     // List[0]{@1,@1}
-//     // List[1]{@0,@0}
-//     // List[1]{@0,@0}
-//     // List[1]{@3,@4}
-//     // Add[0]{@0:1,@1:1}
-//     // Add[0]{@0:2}
-//     // Add[0]{@0:2,@1:1}
-//     let data = read_boa_txt("tests/test1.boa.txt");
-//     let ids1 = partref_naive(&data);
-//     let ids2 = partref_nlogn(data);
-//     assert_eq!(&ids1, &ids2);
+#[test]
+fn test_partref_nlogn() {
+    // List[0]{@0,@1}
+    // List[0]{@1,@1}
+    // List[1]{@0,@0}
+    // List[1]{@0,@0}
+    // List[1]{@3,@4}
+    // Add[0]{@0:1,@1:1}
+    // Add[0]{@0:2}
+    // Add[0]{@0:2,@1:1}
+    let (data,r) = read_boa_txt("tests/test1.boa.txt");
+    let ids1 = partref_naive(&data, &r);
+    let ids2 = partref_nlogn(data, &r);
+    assert_eq!(&ids1, &ids2);
 
-//     let data = read_boa_txt("tests/test2.boa.txt");
-//     let ids = partref_nlogn(data);
-//     assert_eq!(&ids, &vec![0,1,2,3,4,5]);
-// }
+    let data = read_boa_txt("tests/test2.boa.txt");
+    let ids = partref_nlogn(data);
+    assert_eq!(&ids, &vec![0,1,2,3,4,5]);
+}
 
-// #[test]
-// fn test_partref_wlan() {
-//     let filename = "benchmarks/small/wlan0_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_582327_771088_roundrobin_4.boa.txt";
-//     let data = read_boa_txt(&filename);
-//     let ids = partref_nlogn(data);
-//     assert_eq!(*ids.iter().max().unwrap(), 107864);
+#[test]
+fn test_partref_wlan() {
+    let filename = "benchmarks/small/wlan0_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_582327_771088_roundrobin_4.boa.txt";
+    let data = read_boa_txt(&filename);
+    let ids = partref_nlogn(data);
+    assert_eq!(*ids.iter().max().unwrap(), 107864);
 
-//     let filename = "benchmarks/wlan/wlan1_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_1408676_1963522_roundrobin_32.boa.txt";
-//     let data = read_boa_txt(&filename);
-//     let ids = partref_nlogn(data);
-//     assert_eq!(*ids.iter().max().unwrap(), 243324);
+    let filename = "benchmarks/wlan/wlan1_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_1408676_1963522_roundrobin_32.boa.txt";
+    let data = read_boa_txt(&filename);
+    let ids = partref_nlogn(data);
+    assert_eq!(*ids.iter().max().unwrap(), 243324);
 
-//     // let filename = "benchmarks/small/wlan0_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_582327_771088_roundrobin_4.boa.txt";
-//     // let data = read_boa_txt(&filename);
-//     // let ids = partref_naive(&data);
-//     // assert_eq!(*ids.iter().max().unwrap(), 107864);
+    // let filename = "benchmarks/small/wlan0_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_582327_771088_roundrobin_4.boa.txt";
+    // let data = read_boa_txt(&filename);
+    // let ids = partref_naive(&data);
+    // assert_eq!(*ids.iter().max().unwrap(), 107864);
 
-//     // let filename = "benchmarks/wlan/wlan1_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_1408676_1963522_roundrobin_32.boa.txt";
-//     // let data = read_boa_txt(&filename);
-//     // let ids = partref_naive(&data);
-//     // assert_eq!(*ids.iter().max().unwrap(), 243324);
-// }
+    // let filename = "benchmarks/wlan/wlan1_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_1408676_1963522_roundrobin_32.boa.txt";
+    // let data = read_boa_txt(&filename);
+    // let ids = partref_naive(&data);
+    // assert_eq!(*ids.iter().max().unwrap(), 243324);
+}
 
 fn main() -> Result<(),()> {
     let args:Vec<String> = env::args().collect();
