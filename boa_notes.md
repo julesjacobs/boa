@@ -8,7 +8,8 @@ TODO:
 - Optimize parser [done]
 - Write canonicalize_inexact with raw pointers [done]
 - Dictionary compressed representation [done]
-- Save binary representation in separate file
+- Save binary representation in separate file [done]
+- Make benchmarking program, save to CSV
 - Fix memory use due having a large number of states (maybe renumber is the culprit?)
 - Hybrid algorithm: keep using naive as long as number of partitions doubles every iteration
 - Make algorithm safe against hash collisions

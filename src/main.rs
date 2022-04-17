@@ -16,9 +16,14 @@ fn mb(num_bytes: usize) -> String {
 
 // FxHash appears to be the winner.
 // Although AHash is a lot faster than the default hasher, I've found FxHash to be even faster.
-use fxhash::{FxHashMap, FxHasher64};
-fn new_hasher() -> FxHasher64 { FxHasher64::default() }
-type HMap<K,V> = FxHashMap<K,V>;
+// use fxhash::{FxHashMap, FxHasher64};
+// fn new_hasher() -> FxHasher64 { FxHasher64::default() }
+// type HMap<K,V> = FxHashMap<K,V>;
+
+use ahash::{AHasher, AHashMap};
+fn new_hasher() -> AHasher { AHasher::default() }
+type HMap<K,V> = AHashMap<K,V>;
+
 
 // Using a different allocator also makes a huge difference.
 // I've found jemalloc to be better than mimalloc, both in terms of speed and memory use.
@@ -131,7 +136,6 @@ impl CReader {
     }
 }
 
-#[derive(DataSize)]
 struct CWriter {
     headers_map: HMap<u32,u8>,
     values_map: HMap<u64,u8>,
@@ -541,7 +545,8 @@ where P: AsRef<Path>, {
     for i in 0..r.values.len() {
         r.values[i] = file.read_u64::<LittleEndian>().expect("File reading error.");
     }
-    let mut data = vec![];
+    let size = file.metadata().map(|m| m.len() as usize + 1).unwrap_or(0);
+    let mut data = Vec::with_capacity(size);
     file.read_to_end(&mut data).expect("File reading error.");
     return (data,r)
 }
@@ -1065,20 +1070,81 @@ fn repartition_inexact_unsafe(coa : &Coalg, states: &[u32], ids: &[ID]) -> Vec<u
             sigs.push(sig);
         }
     }
+    return sigs
+}
+
+unsafe fn canonicalize_inexact_node_unsafe64<'a>(mut p : *const u8, r: &CReader, ids: &[u64], w: u32) -> (u64, *const u8) {
+    let (typ,tag,len) = decode_header(w);
+    let mut hasher = new_hasher();
+    (typ,tag).hash(&mut hasher);
+    match typ {
+        LIST_TYP => {
+            for _ in 0..len {
+                let (sig, rest) = canonicalize_inexact_unsafe64(p, r, ids);
+                sig.hash(&mut hasher);
+                p = rest;
+            }
+        },
+        SET_TYP => {
+            let mut repr: Vec<u64> = (0..len).map(|_| {
+                let (sig, rest) = canonicalize_inexact_unsafe64(p, r, ids);
+                p = rest; sig
+            }).collect();
+            repr.sort_unstable();
+            for &sig in repr.iter().dedup() { sig.hash(&mut hasher); }
+        },
+        ADD_TYP|MAX_TYP|OR_TYP => {
+            let mut repr: Vec<(u64,u64)> = (0..len).map(|_| {
+                let (sig, p2) = canonicalize_inexact_unsafe64(p, r, ids);
+                let (w,p3) = r.read_value(p2);
+                p = p3;
+                (sig,w)
+            }).collect();
+            match typ {
+                ADD_TYP => hash_with_op(&mut repr, &mut hasher, |a,b| a+b),
+                OR_TYP => hash_with_op(&mut repr, &mut hasher, |a,b| a|b),
+                MAX_TYP => hash_with_op(&mut repr, &mut hasher, |a,b| max(a,b)),
+                _ => panic!("Unreachable")
+            }
+        },
+        _ => panic!("Unknown typ.")
+    }
+    return (hasher.finish(), p);
+}
+
+unsafe fn canonicalize_inexact_unsafe64<'a>(p : *const u8, r: &CReader, ids: &[u64]) -> (u64, *const u8) {
+    let (w,p) = r.read_node(p);
+    if is_state(w) {
+        return (ids[get_state(w) as usize] as u64, p);
+    } else {
+        return canonicalize_inexact_node_unsafe64(p, r, ids, get_header(w));
+    }
+}
+
+fn repartition_inexact_unsafe64(coa : &Coalg, states: &[u32], ids: &[u64]) -> Vec<u64> {
+    let mut sigs = vec![];
+    sigs.reserve(states.len());
+    for &state in states {
+        let p = coa.locs[state as usize];
+        unsafe {
+            let (sig,_rest) = canonicalize_inexact_unsafe64(p, &coa.reader, ids);
+            sigs.push(sig);
+        }
+    }
     return sigs;
 }
 
-fn repartition_all_inexact_unsafe(data: &[u8], r: &CReader, ids: &[ID]) -> Vec<ID> {
+fn repartition_all_inexact_unsafe64(data: &[u8], r: &CReader, ids: &[u64]) -> Vec<u64> {
     unsafe {
         let mut new_ids_raw = vec![];
         new_ids_raw.reserve(ids.len());
         let mut p = data.as_ptr();
         while !CReader::is_at_end(data, p) {
-            let (sig, p_next) = canonicalize_inexact_unsafe(p, r, ids);
+            let (sig, p_next) = canonicalize_inexact_unsafe64(p, r, ids);
             new_ids_raw.push(sig);
             p = p_next;
         }
-        return renumber(&new_ids_raw)
+        return new_ids_raw
     }
 }
 
@@ -1131,7 +1197,7 @@ unsafe fn canonicalize_inexact_unsafe_init<'a>(p : *const u8, r: &CReader) -> (u
     }
 }
 
-fn init_partition_ids_unsafe(data: &[u8], r: &CReader) -> Vec<ID> {
+fn init_partition_ids_unsafe(data: &[u8], r: &CReader) -> Vec<u64> {
     unsafe {
         let mut new_ids_raw = vec![];
         let mut p = data.as_ptr();
@@ -1140,31 +1206,30 @@ fn init_partition_ids_unsafe(data: &[u8], r: &CReader) -> Vec<ID> {
             new_ids_raw.push(sig);
             p = p_next;
         }
-        return renumber(&new_ids_raw)
+        return new_ids_raw
     }
 }
 
-fn partref_naive(data: &[u8], r: &CReader) -> Vec<ID> {
+fn count_parts(sigs: &[u64]) -> usize {
+    let mut sigs2 = sigs.to_vec();
+    sigs2.sort_unstable();
+    sigs2.dedup();
+    return sigs2.len();
+}
+
+fn partref_naive(data: &[u8], r: &CReader) -> Vec<u32> {
     let mut ids = init_partition_ids_unsafe(data, r);
+    let mut part_count = count_parts(&ids);
     for iter in 0..99999999 {
         // let start_time = SystemTime::now();
-        let new_ids = repartition_all_inexact_unsafe(data, r, &ids);
-        // let iter_time = start_time.elapsed().unwrap();
-
-        // debug iteration info
-        // let mut new_ids2 = new_ids.clone();
-        // new_ids2.sort_unstable();
-        // new_ids2.dedup();
-        // let num_parts = new_ids2.len();
-        // println!("- Iteration {}, number of partitions: {} (refinement time = {} seconds)", iter, num_parts, iter_time.as_secs_f32());
-        // end debug info
-
-        if new_ids[new_ids.len()-1] == new_ids.len() as u32 - 1 || new_ids == ids {
-        // if new_ids == ids {
+        let new_ids = repartition_all_inexact_unsafe64(data, r, &ids);
+        let new_part_count = count_parts(&new_ids);
+        if new_part_count == new_ids.len() || new_part_count == part_count {
             println!("Number of iterations: {}", iter+1);
-            return new_ids
+            return new_ids.iter().map(|id| *id as u32).collect();
         } else {
             ids = new_ids;
+            part_count = new_part_count;
         }
     }
     panic!("Ran out of iterations.")
@@ -1173,7 +1238,7 @@ fn partref_naive(data: &[u8], r: &CReader) -> Vec<ID> {
 #[test]
 fn test_partref_naive() {
     let (data,r) = read_boa_txt("tests/test1.boa.txt");
-    let ids = partref_naive(&data,&r);
+    let ids = renumber(&partref_naive(&data,&r));
     assert_eq!(&ids, &vec![0,0,1,1,2,3,3,4]);
 }
 
@@ -1193,6 +1258,36 @@ where A:Hash+Eq {
     }).collect();
     // println!("Canon map size: {}", data_size(&canon_map));
     return res;
+}
+
+fn renumber_sort<A> (sigs: &[A]) -> Vec<u32>
+where A:Ord+Copy {
+    let mut xs:Vec<(u32,A)> = (0..sigs.len()).map(|i| { (i as u32,sigs[i]) }).collect();
+    xs.sort_unstable_by_key(|kv| kv.1);
+    let mut ids:Vec<u32> = vec![0;sigs.len()];
+    let mut id = 0;
+    let mut last_sig = xs[0].1;
+    for (i,sig) in xs {
+        if sig != last_sig {
+            id += 1;
+            last_sig = sig;
+        }
+        ids[i as usize] = id;
+    }
+    // make sure the first id is 0
+    // n log n algorithm relies on this (but could improve it so that it doesn't)
+    if ids[0] != 0 {
+        for id in ids.iter_mut() {
+            if *id == 0 { *id = 1 }
+            else if *id == 1 { *id = 0 }
+        }
+    }
+    return ids
+}
+
+#[test]
+fn test_renumber_sort() {
+    assert_eq!(renumber_sort(&vec![3,1,3,1,5,3,0,1]), vec![0,1,0,1,2,0,3,1]);
 }
 
 fn cumsum_mut(xs: &mut [u32]) {
@@ -1445,7 +1540,7 @@ fn test_partref_nlogn() {
     let (data,r) = read_boa_txt("tests/test1.boa.txt");
     let ids1 = partref_naive(&data, &r);
     let ids2 = partref_nlogn(data, r);
-    assert_eq!(&ids1, &ids2);
+    assert_eq!(&renumber(&ids1), &ids2);
 
     let (data,r) = read_boa_txt("tests/test2.boa.txt");
     let ids = partref_nlogn(data, r);
