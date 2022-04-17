@@ -20,6 +20,9 @@ except FileNotFoundError:
     print("Benchmarking likely does not work on Windows.")
     exit(1)
 
+executable = "./target/release/boa"
+print("Make sure you have compiled the right version in release mode. We benchmark the executable " + executable)
+
 
 files = glob.glob("benchmarks/*/*.boa")
 benchmarks = [(file, algorithm) for file in files for algorithm in ["naive", "nlogn"]]
@@ -30,7 +33,7 @@ w.writerow(["file", "algorithm", "num_states", "compressedsize_mb", "time_sec", 
 
 
 for (file,algorithm) in benchmarks:
-  out, err = subprocess.Popen([time_command, "-v", "./target/release/boa", algorithm, file],
+  out, err = subprocess.Popen([time_command, "-v", executable, algorithm, file],
                           stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
   program_output = out.decode("utf-8")
   time_output = err.decode("utf-8")
