@@ -20,16 +20,15 @@ except FileNotFoundError:
     print("Benchmarking likely does not work on Windows.")
     exit(1)
 
+os.system("cargo build -r")
 executable = "./target/release/boa"
-print("Make sure you have compiled the right version in release mode. We benchmark the executable " + executable)
-
 
 files = glob.glob("benchmarks/*/*.boa")
 benchmarks = [(file, algorithm) for file in files for algorithm in ["naive", "nlogn"]]
 
 
 w = csv.writer(open("benchresults.csv", "w"))
-w.writerow(["file", "algorithm", "num_states", "compressedsize_mb", "time_sec", "mem_mb"])
+w.writerow(["file", "algorithm", "num_states", "compressedsize_mb", "mem_mb", "time_sec"])
 
 
 for (file,algorithm) in benchmarks:
@@ -62,6 +61,6 @@ for (file,algorithm) in benchmarks:
     exit()
   num_states = int(num_states[0])
 
-  w.writerow([file,algorithm,num_states,compressedsize_mb, time_sec, mem_mb])
+  w.writerow([file,algorithm,num_states,compressedsize_mb, mem_mb, time_sec])
 
-  print(f"{file=}, {algorithm=}, {num_states=}, {compressedsize_mb=}, {time_sec=}, {mem_mb=}")
+  print(f"{file=}, {algorithm=}, {num_states=}, {compressedsize_mb=}, {mem_mb=}, {time_sec=}")

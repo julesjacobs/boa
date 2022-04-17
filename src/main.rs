@@ -16,13 +16,13 @@ fn mb(num_bytes: usize) -> String {
 
 // FxHash appears to be the winner.
 // Although AHash is a lot faster than the default hasher, I've found FxHash to be even faster.
-// use fxhash::{FxHashMap, FxHasher64};
-// fn new_hasher() -> FxHasher64 { FxHasher64::default() }
-// type HMap<K,V> = FxHashMap<K,V>;
+use fxhash::{FxHashMap, FxHasher64};
+fn new_hasher() -> FxHasher64 { FxHasher64::default() }
+type HMap<K,V> = FxHashMap<K,V>;
 
-use ahash::{AHasher, AHashMap};
-fn new_hasher() -> AHasher { AHasher::default() }
-type HMap<K,V> = AHashMap<K,V>;
+// use ahash::{AHasher, AHashMap};
+// fn new_hasher() -> AHasher { AHasher::default() }
+// type HMap<K,V> = AHashMap<K,V>;
 
 
 // Using a different allocator also makes a huge difference.
@@ -1579,8 +1579,15 @@ enum Action {
     Nlogn,
 }
 
+/// Binary coalgebraic partition refinement.\n\
+
 #[derive(Parser,Debug)]
-#[clap(author, version, about, long_about = None)]
+#[clap(author, version,
+about = "Binary coalgebraic partition refinement.\n\
+- Use `boa convert file.boa.txt` to convert a text file to binary format.\n\
+- Use `boa convert file.boa` to convert a binary file to text format.\n\
+- Use `boa naive file.boa` to run the naive algorithm.\n\
+- Use `boa nlogn file.boa` to run the nlogn algorithm.", long_about = None)]
 struct Args {
     #[clap(arg_enum)]
     action: Action,
