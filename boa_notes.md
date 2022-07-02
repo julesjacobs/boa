@@ -13,7 +13,9 @@ TODO:
 - Fix memory use due having a large number of states (maybe renumber is the culprit?)
 - Hybrid algorithm: keep using naive as long as number of partitions doubles every iteration
 - Make algorithm safe against hash collisions
-- New benchmarks
+- New benchmarks / program to modify existing benchmark:
+  + Modify state refs to refer to close-by states
+  + Duplicate states k times
 
 - Introduce additional types, Loc, ID, State, etc.
 - Remove unsafe as much as possible.
@@ -25,6 +27,20 @@ TODO:
 - Run benchmarks on PC
 - Try using sorting instead of hashing in various places
 
+# Hybrid algorithm
+
+Different repartition methods:
+- partition_init computes initial signature of states
+- naive algorithm: runs repartition_all from front to back.
+- seminaive algorithm: only repartitions non-singleton states.
+- n log n algorithm: runs repartition on only on dirty states.
+
+Naive runs: iterate repartition_all
+Switch to n log n:
+- need to compute backrefs -> expensive
+- can make it cheaper because we never need to mark singleton states dirty => don't need to add them as backrefs
+- to do that we need to already have a good partition
+n log n runs: repartition on blocks
 
 Does selecting largest partition according to how many predecessors it has have an effect on asymptotic complexity?
 ----------------------------------------------------

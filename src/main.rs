@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-use std::{hash::{Hash, Hasher}, fs::File, io::{BufReader, BufRead, BufWriter, Write, Read}, path::Path, cmp::max, time::SystemTime, env};
+use std::{hash::{Hash, Hasher}, fs::File, io::{BufReader, BufRead, BufWriter, Write, Read}, path::Path, cmp::max, time::SystemTime};
 use byteorder::{LittleEndian,WriteBytesExt, ReadBytesExt};
 use datasize::{DataSize, data_size};
 use itertools::Itertools;
@@ -29,7 +29,7 @@ type HMap<K,V> = FxHashMap<K,V>;
 // I've found jemalloc to be better than mimalloc, both in terms of speed and memory use.
 #[cfg(not(target_env = "msvc"))]
 use jemallocator::Jemalloc;
-use memmap::MmapOptions;
+
 
 #[cfg(not(target_env = "msvc"))]
 #[global_allocator]
@@ -524,7 +524,7 @@ where P: AsRef<Path>, {
             let node = Node::read(r, &mut p);
             node.to_ascii(&mut buf);
             if !CReader::is_at_end(data, p) { buf.push(b'\n') };
-            writer.write_all(&buf);
+            writer.write_all(&buf).unwrap();
             buf.clear();
         }
     }
@@ -564,9 +564,9 @@ where P: AsRef<Path>, {
         writer.write_u32::<LittleEndian>(header).expect("Writing error.");
     }
     for value in r.values {
-        writer.write_u64::<LittleEndian>(value).expect("Writing error.");;
+        writer.write_u64::<LittleEndian>(value).expect("Writing error.");
     }
-    writer.write_all(data).expect("Writing error.");;
+    writer.write_all(data).expect("Writing error.");
 }
 
 fn convert_file(filename: &str) {
@@ -1220,10 +1220,12 @@ fn count_parts(sigs: &[u64]) -> usize {
 fn partref_naive(data: &[u8], r: &CReader) -> Vec<u32> {
     let mut ids = init_partition_ids_unsafe(data, r);
     let mut part_count = count_parts(&ids);
+    println!("Initial number of partitions/total states: {}/{}", part_count, ids.len());
     for iter in 0..99999999 {
         // let start_time = SystemTime::now();
         let new_ids = repartition_all_inexact_unsafe64(data, r, &ids);
         let new_part_count = count_parts(&new_ids);
+        println!("Iteration: {}, number of partitions/total states: {}/{}", iter, new_part_count, ids.len());
         if new_part_count == new_ids.len() || new_part_count == part_count {
             println!("Number of iterations: {}", iter+1);
             return new_ids.iter().map(|id| *id as u32).collect();
@@ -1262,12 +1264,14 @@ where A:Hash+Eq {
 
 fn renumber_sort<A> (sigs: &[A]) -> Vec<u32>
 where A:Ord+Copy {
-    let mut xs:Vec<(u32,A)> = (0..sigs.len()).map(|i| { (i as u32,sigs[i]) }).collect();
-    xs.sort_unstable_by_key(|kv| kv.1);
+    // TODO: Try sorting array 0..n by key sigs[i]
+    let mut xs:Vec<u32> = (0..sigs.len() as u32).collect();
+    xs.sort_unstable_by_key(|i| sigs[*i as usize]);
     let mut ids:Vec<u32> = vec![0;sigs.len()];
     let mut id = 0;
-    let mut last_sig = xs[0].1;
-    for (i,sig) in xs {
+    let mut last_sig = sigs[xs[0] as usize];
+    for i in xs {
+        let sig = sigs[i as usize];
         if sig != last_sig {
             id += 1;
             last_sig = sig;
@@ -1276,18 +1280,43 @@ where A:Ord+Copy {
     }
     // make sure the first id is 0
     // n log n algorithm relies on this (but could improve it so that it doesn't)
-    if ids[0] != 0 {
+    let firstid = ids[0];
+    if firstid != 0 {
         for id in ids.iter_mut() {
-            if *id == 0 { *id = 1 }
-            else if *id == 1 { *id = 0 }
+            if *id == 0 { *id = firstid }
+            else if *id == firstid { *id = 0 }
         }
     }
     return ids
+
+    // let mut xs:Vec<(u32,A)> = (0..sigs.len()).map(|i| { (i as u32,sigs[i]) }).collect();
+    // xs.sort_unstable_by_key(|kv| kv.1);
+    // let mut ids:Vec<u32> = vec![0;sigs.len()];
+    // let mut id = 0;
+    // let mut last_sig = xs[0].1;
+    // for (i,sig) in xs {
+    //     if sig != last_sig {
+    //         id += 1;
+    //         last_sig = sig;
+    //     }
+    //     ids[i as usize] = id;
+    // }
+    // // make sure the first id is 0
+    // // n log n algorithm relies on this (but could improve it so that it doesn't)
+    // if ids[0] != 0 {
+    //     for id in ids.iter_mut() {
+    //         if *id == 0 { *id = 1 }
+    //         else if *id == 1 { *id = 0 }
+    //     }
+    // }
+    // return ids
 }
 
 #[test]
 fn test_renumber_sort() {
-    assert_eq!(renumber_sort(&vec![3,1,3,1,5,3,0,1]), vec![0,1,0,1,2,0,3,1]);
+    // assert_eq!(renumber_sort(&vec![3,1,3,1,5,3,0,1]), vec![0,1,0,1,2,0,3,1]);
+    assert_eq!(renumber_sort(&vec![3,1,3,1,5,3,0,1]), vec![0,1,0,1,3,0,2
+    ,1]);
 }
 
 fn cumsum_mut(xs: &mut [u32]) {
@@ -1357,7 +1386,7 @@ fn test_index_of_max() {
 type State = u32;
 
 #[derive(DataSize)]
-struct DirtyPartitions {
+struct DirtyPartition {
     buffer: Vec<State>, // buffer of states (partitioned)
     position: Vec<u32>, // position of each state in partition array
     partition_id: Vec<ID>, // partition of each state
@@ -1365,9 +1394,9 @@ struct DirtyPartitions {
     worklist: Vec<u32>, // worklist of partitions
 }
 
-impl DirtyPartitions {
-    fn new(num_states: u32) -> DirtyPartitions {
-        DirtyPartitions {
+impl DirtyPartition {
+    fn new(num_states: u32) -> DirtyPartition {
+        DirtyPartition {
             buffer: (0..num_states).collect(),
             position: (0..num_states).collect(),
             partition_id: vec![0;num_states as usize],
@@ -1378,7 +1407,7 @@ impl DirtyPartitions {
 
     /// Mark the state as dirty, putting its partition on the worklist if necessary
     /// Time complexity: O(1)
-    fn mark_dirty(self: &mut DirtyPartitions, state: State) {
+    fn mark_dirty(self: &mut DirtyPartition, state: State) {
         let id = self.partition_id[state as usize];
         let pos = self.position[state as usize];
         let (start, mid, end) = self.partition[id as usize];
@@ -1401,7 +1430,7 @@ impl DirtyPartitions {
     /// Determine slice of states to compute signatures for.
     /// Includes one clean state at the start if there are any clean states.
     /// Time complexity: O(1)
-    fn refiners(self: &DirtyPartitions, id: ID) -> &[State] {
+    fn refiners(self: &DirtyPartition, id: ID) -> &[State] {
         let (start, mid, end) = self.partition[id as usize];
         if start == mid { // no clean states
             return &self.buffer[start as usize..end as usize]
@@ -1410,10 +1439,11 @@ impl DirtyPartitions {
         }
     }
 
+    /// TODO: Try assigning the old ID to the block with the fewest predecessors
     /// Time complexity: O(signatures.len())
     /// Returns vector of new partition ids
     /// Signatures are assumed to be 0..n with the first starting with 0
-    fn refine(self: &mut DirtyPartitions, partition_id: ID, signatures: &[u32]) -> Vec<u32> {
+    fn refine(self: &mut DirtyPartition, partition_id: ID, signatures: &[u32]) -> Vec<u32> {
         // let signatures = renumber(signatures); // Renumber signatures to be 0..n. This makes the sig of the clean states 0 if there are any.
 
         // compute the occurrence counts of each of the signatures
@@ -1478,11 +1508,13 @@ impl DirtyPartitions {
 fn partref_nlogn_raw(data: Vec<u8>, r: CReader) -> Vec<ID> {
     // println!("===================== Starting partref_nlogn");
     // panic!("Stopped");
+    print!("Initializing backrefs...");
     let coa = Coalg::new(data, r);
+    println!("done.");
     // coa.dump();
     // coa.dump_backrefs();
     let mut iters = 0;
-    let mut parts = DirtyPartitions::new(coa.num_states());
+    let mut parts = DirtyPartition::new(coa.num_states());
     while let Some(partition_id) = parts.worklist.pop() {
         let states = parts.refiners(partition_id);
         // println!("states = {:?}", states);
