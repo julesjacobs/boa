@@ -1288,7 +1288,7 @@ fn test_partref_wlan() {
     let ids = partref_nlogn(data, r);
     assert_eq!(*ids.iter().max().unwrap(), 107864);
 
-    let filename = "benchmarks/wlan/wlan1_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_1408676_1963522_roundrobin_32.boa.txt";
+    let filename = "tests/wlan1_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_1408676_1963522_roundrobin_32.boa.txt";
     let (data, r) = read_boa_txt(&filename);
     let ids = partref_nlogn(data, r);
     assert_eq!(*ids.iter().max().unwrap(), 243324);
