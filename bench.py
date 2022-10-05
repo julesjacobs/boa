@@ -24,7 +24,9 @@ os.system("cargo build -r")
 executable = "./target/release/boa"
 
 files = glob.glob("benchmarks/*/*.boa")
-benchmarks = [(file, algorithm) for file in files for algorithm in ["naive", "nlogn"]]
+# algs = ["naive", "nlogn"]
+algs = ["nlogn"]
+benchmarks = [(file, algorithm) for file in files for algorithm in algs]
 
 
 w = csv.writer(open("benchresults.csv", "w"))

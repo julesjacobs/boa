@@ -728,185 +728,6 @@ fn test_new_coalg() {
 
 type ID = u32; // represents canonical ID of a state or sub-node of a state, refers to a partition number
 
-// struct Tables {
-//     last_id : ID,
-//     coll_table : HMap<Vec<ID>, ID>,
-//     mon_table : HMap<Vec<(ID,u64)>, ID>,
-// }
-
-// fn insert_or_op<A,F>(xs: &mut Vec<(A,u64)>, key: A, val: u64, op : F)
-// where F : Fn(u64,u64) -> u64, A:Ord {
-//     let r = xs.binary_search_by(|(key2,_)| key2.cmp(&key));
-//     match r {
-//         Ok(i) => {
-//             xs[i].1 = op(xs[i].1, val);
-//         }
-//         Err(i) => {
-//             xs.insert(i,(key,val));
-//         }
-//     }
-// }
-
-// #[test]
-// fn test_insert_or_op() {
-//     let mut xs = vec![];
-//     insert_or_op(&mut xs, 0, 1, |a,b| a+b);
-//     assert_eq!(xs, vec![(0,1)]);
-//     insert_or_op(&mut xs, 0, 1, |a,b| a+b);
-//     assert_eq!(xs, vec![(0,2)]);
-//     insert_or_op(&mut xs, 3, 1, |a,b| a+b);
-//     assert_eq!(xs, vec![(0,2),(3,1)]);
-//     insert_or_op(&mut xs, 2, 1, |a,b| a+b);
-//     assert_eq!(xs, vec![(0,2),(2,1),(3,1)]);
-//     insert_or_op(&mut xs, 2, 1, |a,b| a+b);
-//     assert_eq!(xs, vec![(0,2),(2,2),(3,1)]);
-// }
-
-// fn canonicalize(data : &[u32], ids: &[ID], loc : &mut Loc, tables : &mut Tables) -> ID {
-//     let w = data[*loc];
-//     if is_state(w) {
-//         *loc += 1;
-//         return ids[w as Loc]
-//     } else {
-//         let typ = get_typ(w);
-//         let tag = get_tag(w);
-//         let len = get_len(w);
-//         *loc += 1;
-//         match typ {
-//             LIST_TYP => {
-//                 let mut children = vec![tag as ID];
-//                 for _ in 0..len {
-//                     children.push(canonicalize(data, ids, loc,tables));
-//                 }
-//                 if tables.coll_table.contains_key(&children) {
-//                     return tables.coll_table[&children];
-//                 } else {
-//                     let id = tables.last_id;
-//                     tables.last_id += 1;
-//                     tables.coll_table.insert(children, id);
-//                     return id
-//                 }
-//             },
-//             SET_TYP => {
-//                 let mut children = vec![];
-//                 for _ in 0..len {
-//                     children.push(canonicalize(data, ids, loc, tables));
-//                 }
-//                 children.sort();
-//                 children.dedup();
-//                 children.push(tag as ID);
-//                 if tables.coll_table.contains_key(&children) {
-//                     return tables.coll_table[&children];
-//                 } else {
-//                     let id = tables.last_id;
-//                     tables.last_id += 1;
-//                     tables.coll_table.insert(children, id);
-//                     return id
-//                 }
-//             },
-//             ADD_TYP => {
-//                 let mut repr = vec![];
-//                 for _ in 0..len {
-//                     let n = canonicalize(data, ids, loc, tables);
-//                     let x1 = data[*loc];
-//                     let x2 = data[*loc+1];
-//                     *loc += 2;
-//                     let w = x1 as u64 | ((x2 as u64) << 32);
-//                     insert_or_op(&mut repr, n, w, |a,b| a+b);
-//                 }
-//                 repr.push((tag as ID,0));
-//                 if tables.mon_table.contains_key(&repr) {
-//                     return tables.mon_table[&repr];
-//                 } else {
-//                     let id = tables.last_id;
-//                     tables.last_id += 1;
-//                     tables.mon_table.insert(repr, id);
-//                     return id
-//                 }
-//             },
-//             MAX_TYP => {
-//                 let mut repr = vec![];
-//                 for _ in 0..len {
-//                     let n = canonicalize(data, ids, loc, tables);
-//                     let x1 = data[*loc];
-//                     let x2 = data[*loc+1];
-//                     *loc += 2;
-//                     let w = x1 as u64 | ((x2 as u64) << 32);
-//                     insert_or_op(&mut repr, n, w, |a,b| max(a,b));
-//                 }
-//                 repr.push((tag as ID,0));
-//                 if tables.mon_table.contains_key(&repr) {
-//                     return tables.mon_table[&repr];
-//                 } else {
-//                     let id = tables.last_id;
-//                     tables.last_id += 1;
-//                     tables.mon_table.insert(repr, id);
-//                     return id
-//                 }
-//             },
-//             OR_TYP => {
-//                 let mut repr = vec![];
-//                 for _ in 0..len {
-//                     let n = canonicalize(data, ids, loc, tables);
-//                     let x1 = data[*loc];
-//                     let x2 = data[*loc+1];
-//                     *loc += 2;
-//                     let w = x1 as u64 | ((x2 as u64) << 32);
-//                     insert_or_op(&mut repr, n, w, |a,b| a|b);
-//                 }
-//                 repr.push((tag as ID,0));
-//                 if tables.mon_table.contains_key(&repr) {
-//                     return tables.mon_table[&repr];
-//                 } else {
-//                     let id = tables.last_id;
-//                     tables.last_id += 1;
-//                     tables.mon_table.insert(repr, id);
-//                     return id
-//                 }
-//             },
-//             _ => {
-//                 panic!("Unknown typ.")
-//             }
-//         }
-//     }
-// }
-
-// #[test]
-// fn canonicalize_test () {
-//     let data = read_boa_txt("tests/test1.boa.txt");
-//     let mut tables = Tables {
-//         last_id: 0,
-//         coll_table: HMap::default(),
-//         mon_table: HMap::default()
-//     };
-//     let ids = vec![0,0,0,0];
-//     let mut loc = 0;
-//     let canon_id1 = canonicalize(&data, &ids, &mut loc, &mut tables);
-//     let canon_id2 = canonicalize(&data, &ids, &mut loc, &mut tables);
-//     let canon_id3 = canonicalize(&data, &ids, &mut loc, &mut tables);
-//     let canon_id4 = canonicalize(&data, &ids, &mut loc, &mut tables);
-//     assert_eq!(canon_id1, 0);
-//     assert_eq!(canon_id2, 0);
-//     assert_eq!(canon_id3, 1);
-//     assert_eq!(canon_id4, 1);
-// }
-
-// // Returns vector of new IDs for each state in states
-// // IDs are labeled 0 to n
-// fn repartition(coa : &Coalg, states: &[State], ids: &[ID]) -> Vec<ID> {
-//     let mut tables = Tables {
-//         last_id: 0,
-//         coll_table: HMap::default(),
-//         mon_table: HMap::default()
-//     };
-//     let mut new_ids_raw = vec![];
-//     for &state in states {
-//         let mut loc_mut = coa.locs[state as usize];
-//         new_ids_raw.push(canonicalize(&coa.data, ids, &mut loc_mut, &mut tables));
-//     }
-//     return renumber(&new_ids_raw);
-// }
-
 fn hash_with_op<A,F,H>(repr: &mut [(A,u64)], hasher: &mut H, op: F)
 where F : Fn(u64,u64) -> u64, A:Ord+Copy+Hash, H:Hasher {
     repr.sort_by_key(|kv| kv.0);
@@ -926,107 +747,21 @@ where F : Fn(u64,u64) -> u64, A:Ord+Copy+Hash, H:Hasher {
     }
 }
 
-// fn canonicalize_inexact_node<'a>(mut data : &'a [u32], ids: &[ID], w: u32) -> (u64, &'a [u32]) {
-//     let typ = get_typ(w);
-//     let tag = get_tag(w);
-//     let len = get_len(w);
-//     let mut hasher = new_hasher();
-//     tag.hash(&mut hasher);
-//     match typ {
-//         LIST_TYP => {
-//             for _ in 0..len {
-//                 let (sig, rest) = canonicalize_inexact(data, ids);
-//                 sig.hash(&mut hasher);
-//                 data = rest;
-//             }
-//         },
-//         SET_TYP => {
-//             let mut repr: Vec<u64> = (0..len).map(|_| {
-//                 let (sig, rest) = canonicalize_inexact(data, ids);
-//                 data = rest; sig
-//             }).collect();
-//             repr.sort_unstable();
-//             repr.dedup();
-//             repr.hash(&mut hasher);
-//             // for &sig in repr.iter().dedup() { sig.hash(&mut hasher); }
-//         },
-//         ADD_TYP => {
-//             let mut repr: Vec<(u64,u64)> = (0..len).map(|_| {
-//                 let (sig, rest) = canonicalize_inexact(data, ids);
-//                 let x1 = rest[0];
-//                 let x2 = rest[1];
-//                 data = &rest[2..];
-//                 let w = x1 as u64 | ((x2 as u64) << 32);
-//                 (sig,w)
-//             }).collect();
-//             hash_with_op(&mut repr, &mut hasher, |a,b| a+b);
-//         },
-//         MAX_TYP => {
-//             let mut repr: Vec<(u64,u64)> = (0..len).map(|_| {
-//                 let (sig, rest) = canonicalize_inexact(data, ids);
-//                 let x1 = rest[0];
-//                 let x2 = rest[1];
-//                 data = &rest[2..];
-//                 let w = x1 as u64 | ((x2 as u64) << 32);
-//                 (sig,w)
-//             }).collect();
-//             hash_with_op(&mut repr, &mut hasher, |a,b| max(a,b));
-//         },
-//         OR_TYP => {
-//             let mut repr: Vec<(u64,u64)> = (0..len).map(|_| {
-//                 let (sig, rest) = canonicalize_inexact(data, ids);
-//                 let x1 = rest[0];
-//                 let x2 = rest[1];
-//                 data = &rest[2..];
-//                 let w = x1 as u64 | ((x2 as u64) << 32);
-//                 (sig,w)
-//             }).collect();
-//             hash_with_op(&mut repr, &mut hasher, |a,b| a|b);
-//         },
-//         _ => {
-//             panic!("Unknown typ.")
-//         }
-//     }
-//     return (hasher.finish(), data);
-// }
-
-// #[inline]
-// fn canonicalize_inexact<'a>(data : &'a [u32], ids: &[ID]) -> (u64, &'a [u32]) {
-//     let w = data[0];
-//     let data = &data[1..];
-//     if is_state(w) {
-//         return (ids[w as Loc] as u64, data);
-//     } else {
-//         return canonicalize_inexact_node(data, ids, w);
-//     }
-// }
-
-// fn repartition_inexact(coa : &Coalg, states: &[State], ids: &[ID]) -> Vec<u64> {
-//     let mut sigs = vec![];
-//     sigs.reserve(states.len());
-//     for &state in states {
-//         let loc = coa.locs[state as usize];
-//         let (sig,_rest) = canonicalize_inexact(&coa.data[loc..], ids);
-//         sigs.push(sig);
-//     }
-//     return sigs;
-// }
-
-unsafe fn canonicalize_inexact_node_unsafe<'a>(mut p : *const u8, r: &CReader, ids: &[ID], w: u32) -> (u64, *const u8) {
+unsafe fn canonicalize_node_unsafe<'a>(mut p : *const u8, r: &CReader, ids: &[ID], w: u32) -> (u64, *const u8) {
     let (typ,tag,len) = decode_header(w);
     let mut hasher = new_hasher();
     (typ,tag).hash(&mut hasher);
     match typ {
         LIST_TYP => {
             for _ in 0..len {
-                let (sig, rest) = canonicalize_inexact_unsafe(p, r, ids);
+                let (sig, rest) = canonicalize_unsafe(p, r, ids);
                 sig.hash(&mut hasher);
                 p = rest;
             }
         },
         SET_TYP => {
             let mut repr: Vec<u64> = (0..len).map(|_| {
-                let (sig, rest) = canonicalize_inexact_unsafe(p, r, ids);
+                let (sig, rest) = canonicalize_unsafe(p, r, ids);
                 p = rest; sig
             }).collect();
             repr.sort_unstable();
@@ -1034,7 +769,7 @@ unsafe fn canonicalize_inexact_node_unsafe<'a>(mut p : *const u8, r: &CReader, i
         },
         ADD_TYP|MAX_TYP|OR_TYP => {
             let mut repr: Vec<(u64,u64)> = (0..len).map(|_| {
-                let (sig, p2) = canonicalize_inexact_unsafe(p, r, ids);
+                let (sig, p2) = canonicalize_unsafe(p, r, ids);
                 let (w,p3) = r.read_value(p2);
                 p = p3;
                 (sig,w)
@@ -1051,43 +786,43 @@ unsafe fn canonicalize_inexact_node_unsafe<'a>(mut p : *const u8, r: &CReader, i
     return (hasher.finish(), p);
 }
 
-unsafe fn canonicalize_inexact_unsafe<'a>(p : *const u8, r: &CReader, ids: &[ID]) -> (u64, *const u8) {
+unsafe fn canonicalize_unsafe<'a>(p : *const u8, r: &CReader, ids: &[ID]) -> (u64, *const u8) {
     let (w,p) = r.read_node(p);
     if is_state(w) {
         return (ids[get_state(w) as usize] as u64, p);
     } else {
-        return canonicalize_inexact_node_unsafe(p, r, ids, get_header(w));
+        return canonicalize_node_unsafe(p, r, ids, get_header(w));
     }
 }
 
-fn repartition_inexact_unsafe(coa : &Coalg, states: &[u32], ids: &[ID]) -> Vec<u64> {
+fn repartition_unsafe(coa : &Coalg, states: &[u32], ids: &[ID]) -> Vec<u64> {
     let mut sigs = vec![];
     sigs.reserve(states.len());
     for &state in states {
         let p = coa.locs[state as usize];
         unsafe {
-            let (sig,_rest) = canonicalize_inexact_unsafe(p, &coa.reader, ids);
+            let (sig,_rest) = canonicalize_unsafe(p, &coa.reader, ids);
             sigs.push(sig);
         }
     }
     return sigs
 }
 
-unsafe fn canonicalize_inexact_node_unsafe64<'a>(mut p : *const u8, r: &CReader, ids: &[u64], w: u32) -> (u64, *const u8) {
+unsafe fn canonicalize_node_unsafe64<'a>(mut p : *const u8, r: &CReader, ids: &[u64], w: u32) -> (u64, *const u8) {
     let (typ,tag,len) = decode_header(w);
     let mut hasher = new_hasher();
     (typ,tag).hash(&mut hasher);
     match typ {
         LIST_TYP => {
             for _ in 0..len {
-                let (sig, rest) = canonicalize_inexact_unsafe64(p, r, ids);
+                let (sig, rest) = canonicalize_unsafe64(p, r, ids);
                 sig.hash(&mut hasher);
                 p = rest;
             }
         },
         SET_TYP => {
             let mut repr: Vec<u64> = (0..len).map(|_| {
-                let (sig, rest) = canonicalize_inexact_unsafe64(p, r, ids);
+                let (sig, rest) = canonicalize_unsafe64(p, r, ids);
                 p = rest; sig
             }).collect();
             repr.sort_unstable();
@@ -1095,7 +830,7 @@ unsafe fn canonicalize_inexact_node_unsafe64<'a>(mut p : *const u8, r: &CReader,
         },
         ADD_TYP|MAX_TYP|OR_TYP => {
             let mut repr: Vec<(u64,u64)> = (0..len).map(|_| {
-                let (sig, p2) = canonicalize_inexact_unsafe64(p, r, ids);
+                let (sig, p2) = canonicalize_unsafe64(p, r, ids);
                 let (w,p3) = r.read_value(p2);
                 p = p3;
                 (sig,w)
@@ -1112,35 +847,35 @@ unsafe fn canonicalize_inexact_node_unsafe64<'a>(mut p : *const u8, r: &CReader,
     return (hasher.finish(), p);
 }
 
-unsafe fn canonicalize_inexact_unsafe64<'a>(p : *const u8, r: &CReader, ids: &[u64]) -> (u64, *const u8) {
+unsafe fn canonicalize_unsafe64<'a>(p : *const u8, r: &CReader, ids: &[u64]) -> (u64, *const u8) {
     let (w,p) = r.read_node(p);
     if is_state(w) {
         return (ids[get_state(w) as usize] as u64, p);
     } else {
-        return canonicalize_inexact_node_unsafe64(p, r, ids, get_header(w));
+        return canonicalize_node_unsafe64(p, r, ids, get_header(w));
     }
 }
 
-fn repartition_inexact_unsafe64(coa : &Coalg, states: &[u32], ids: &[u64]) -> Vec<u64> {
+fn repartition_unsafe64(coa : &Coalg, states: &[u32], ids: &[u64]) -> Vec<u64> {
     let mut sigs = vec![];
     sigs.reserve(states.len());
     for &state in states {
         let p = coa.locs[state as usize];
         unsafe {
-            let (sig,_rest) = canonicalize_inexact_unsafe64(p, &coa.reader, ids);
+            let (sig,_rest) = canonicalize_unsafe64(p, &coa.reader, ids);
             sigs.push(sig);
         }
     }
     return sigs;
 }
 
-fn repartition_all_inexact_unsafe64(data: &[u8], r: &CReader, ids: &[u64]) -> Vec<u64> {
+fn repartition_all_unsafe64(data: &[u8], r: &CReader, ids: &[u64]) -> Vec<u64> {
     unsafe {
         let mut new_ids_raw = vec![];
         new_ids_raw.reserve(ids.len());
         let mut p = data.as_ptr();
         while !CReader::is_at_end(data, p) {
-            let (sig, p_next) = canonicalize_inexact_unsafe64(p, r, ids);
+            let (sig, p_next) = canonicalize_unsafe64(p, r, ids);
             new_ids_raw.push(sig);
             p = p_next;
         }
@@ -1148,22 +883,21 @@ fn repartition_all_inexact_unsafe64(data: &[u8], r: &CReader, ids: &[u64]) -> Ve
     }
 }
 
-
-unsafe fn canonicalize_inexact_node_unsafe_init<'a>(mut p : *const u8, r: &CReader, w: u32) -> (u64, *const u8) {
+unsafe fn canonicalize_node_unsafe_init<'a>(mut p : *const u8, r: &CReader, w: u32) -> (u64, *const u8) {
     let (typ,tag,len) = decode_header(w);
     let mut hasher = new_hasher();
     (typ,tag).hash(&mut hasher);
     match typ {
         LIST_TYP => {
             for _ in 0..len {
-                let (sig, p2) = canonicalize_inexact_unsafe_init(p, r);
+                let (sig, p2) = canonicalize_unsafe_init(p, r);
                 sig.hash(&mut hasher);
                 p = p2;
             }
         },
         SET_TYP => {
             let mut repr: Vec<u64> = (0..len).map(|_| {
-                let (sig, p2) = canonicalize_inexact_unsafe_init(p, r);
+                let (sig, p2) = canonicalize_unsafe_init(p, r);
                 p = p2; sig
             }).collect();
             repr.sort_unstable();
@@ -1171,7 +905,7 @@ unsafe fn canonicalize_inexact_node_unsafe_init<'a>(mut p : *const u8, r: &CRead
         },
         ADD_TYP|MAX_TYP|OR_TYP => {
             let mut repr: Vec<(u64,u64)> = (0..len).map(|_| {
-                let (sig, p2) = canonicalize_inexact_unsafe_init(p, r);
+                let (sig, p2) = canonicalize_unsafe_init(p, r);
                 let (w,p3) = r.read_value(p2);
                 p = p3;
                 (sig,w)
@@ -1188,12 +922,12 @@ unsafe fn canonicalize_inexact_node_unsafe_init<'a>(mut p : *const u8, r: &CRead
     return (hasher.finish(), p);
 }
 
-unsafe fn canonicalize_inexact_unsafe_init<'a>(p : *const u8, r: &CReader) -> (u64, *const u8) {
+unsafe fn canonicalize_unsafe_init<'a>(p : *const u8, r: &CReader) -> (u64, *const u8) {
     let (w,p) = r.read_node(p);
     if is_state(w) {
         return (0, p);
     } else {
-        return canonicalize_inexact_node_unsafe_init(p, r, get_header(w));
+        return canonicalize_node_unsafe_init(p, r, get_header(w));
     }
 }
 
@@ -1202,7 +936,7 @@ fn init_partition_ids_unsafe(data: &[u8], r: &CReader) -> Vec<u64> {
         let mut new_ids_raw = vec![];
         let mut p = data.as_ptr();
         while !CReader::is_at_end(data, p) {
-            let (sig, p_next) = canonicalize_inexact_unsafe_init(p, r);
+            let (sig, p_next) = canonicalize_unsafe_init(p, r);
             new_ids_raw.push(sig);
             p = p_next;
         }
@@ -1223,7 +957,7 @@ fn partref_naive(data: &[u8], r: &CReader) -> Vec<u32> {
     println!("Initial number of partitions/total states: {}/{}", part_count, ids.len());
     for iter in 0..99999999 {
         // let start_time = SystemTime::now();
-        let new_ids = repartition_all_inexact_unsafe64(data, r, &ids);
+        let new_ids = repartition_all_unsafe64(data, r, &ids);
         let new_part_count = count_parts(&new_ids);
         println!("Iteration: {}, number of partitions/total states: {}/{}", iter, new_part_count, ids.len());
         if new_part_count == new_ids.len() || new_part_count == part_count {
@@ -1288,28 +1022,6 @@ where A:Ord+Copy {
         }
     }
     return ids
-
-    // let mut xs:Vec<(u32,A)> = (0..sigs.len()).map(|i| { (i as u32,sigs[i]) }).collect();
-    // xs.sort_unstable_by_key(|kv| kv.1);
-    // let mut ids:Vec<u32> = vec![0;sigs.len()];
-    // let mut id = 0;
-    // let mut last_sig = xs[0].1;
-    // for (i,sig) in xs {
-    //     if sig != last_sig {
-    //         id += 1;
-    //         last_sig = sig;
-    //     }
-    //     ids[i as usize] = id;
-    // }
-    // // make sure the first id is 0
-    // // n log n algorithm relies on this (but could improve it so that it doesn't)
-    // if ids[0] != 0 {
-    //     for id in ids.iter_mut() {
-    //         if *id == 0 { *id = 1 }
-    //         else if *id == 1 { *id = 0 }
-    //     }
-    // }
-    // return ids
 }
 
 #[test]
@@ -1439,7 +1151,7 @@ impl DirtyPartition {
         }
     }
 
-    /// TODO: Try assigning the old ID to the block with the fewest predecessors
+    /// TODO: Optimisation: assign the old ID to the block with the fewest predecessors
     /// Time complexity: O(signatures.len())
     /// Returns vector of new partition ids
     /// Signatures are assumed to be 0..n with the first starting with 0
@@ -1513,12 +1225,13 @@ fn partref_nlogn_raw(data: Vec<u8>, r: CReader) -> Vec<ID> {
     println!("done.");
     // coa.dump();
     // coa.dump_backrefs();
+    println!("Num backrefs: {}", coa.backrefs.len());
     let mut iters = 0;
     let mut parts = DirtyPartition::new(coa.num_states());
     while let Some(partition_id) = parts.worklist.pop() {
         let states = parts.refiners(partition_id);
         // println!("states = {:?}", states);
-        let signatures = renumber::<u64>(&repartition_inexact_unsafe(&coa, states, &parts.partition_id));
+        let signatures = renumber::<u64>(&repartition_unsafe(&coa, states, &parts.partition_id));
         // println!("partition id = {:?}, partition = {:?}, states = {:?}, sigs = {:?}", partition_id, parts.partition[partition_id as usize], states, &signatures);
         let new_partitions = parts.refine(partition_id, &signatures);
         // println!("shrunk partition = {:?}, new partitions = {:?}, buffer = {:?}", parts.partition[partition_id as usize], &new_partitions.iter().map(|pid| parts.partition[*pid as usize]).collect::<Vec<(u32,u32,u32)>>(), &parts.buffer);
@@ -1540,17 +1253,6 @@ fn partref_nlogn_raw(data: Vec<u8>, r: CReader) -> Vec<ID> {
     println!("DirtyPartitions size: {}, Coalg size: {}", mb(data_size(&parts)), mb(data_size(&coa)));
     println!("Coalg sizes {{ \n  data: {}, \n  reader: {}, \n  locs: {}, \n  backrefs: {}, \n  backrefs_locs: {} \n}}",
         mb(data_size(&coa.data)), mb(data_size(&coa.reader)), mb(&coa.locs.len()*8), mb(data_size(&coa.backrefs)), mb(data_size(&coa.backrefs_locs)));
-
-    // struct Coalg {
-    //     data: Vec<u8>, // binary representation of the coalgebra
-    //     reader: CReader,
-    //     #[data_size(with = ptrvec_datasize)]
-    //     locs: Vec<*const u8>, // gives the location in data where the i-th state starts
-    //     backrefs: Vec<u32>, // buffer of backrefs
-    //     backrefs_locs: Vec<u32> // backrefs_locs[i] gives the index into backrefs[backrefs_locs[i]] where the backrefs of the i-th state start
-    // }
-
-    // println!("===================== Ending partref_nlogn");
     return parts.partition_id;
 }
 
@@ -1581,7 +1283,7 @@ fn test_partref_nlogn() {
 
 #[test]
 fn test_partref_wlan() {
-    let filename = "benchmarks/small/wlan0_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_582327_771088_roundrobin_4.boa.txt";
+    let filename = "tests/small/wlan0_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_582327_771088_roundrobin_4.boa.txt";
     let (data,r) = read_boa_txt(&filename);
     let ids = partref_nlogn(data, r);
     assert_eq!(*ids.iter().max().unwrap(), 107864);
@@ -1590,16 +1292,6 @@ fn test_partref_wlan() {
     let (data, r) = read_boa_txt(&filename);
     let ids = partref_nlogn(data, r);
     assert_eq!(*ids.iter().max().unwrap(), 243324);
-
-    // let filename = "benchmarks/small/wlan0_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_582327_771088_roundrobin_4.boa.txt";
-    // let data = read_boa_txt(&filename);
-    // let ids = partref_naive(&data);
-    // assert_eq!(*ids.iter().max().unwrap(), 107864);
-
-    // let filename = "benchmarks/wlan/wlan1_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_1408676_1963522_roundrobin_32.boa.txt";
-    // let data = read_boa_txt(&filename);
-    // let ids = partref_naive(&data);
-    // assert_eq!(*ids.iter().max().unwrap(), 243324);
 }
 
 use clap::{Parser, ArgEnum};
