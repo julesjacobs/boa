@@ -1,5 +1,5 @@
 /target
-/tests
+/tests/scaling
 /benchmarks
 .DS_Store
 Cargo.lock
