@@ -1,5 +1,5 @@
 #![allow(dead_code)]
-use std::{hash::{Hash, Hasher}, fs::File, io::{BufReader, BufRead, BufWriter, Write, Read}, path::Path, cmp::max, time::SystemTime};
+use std::{hash::{Hash, Hasher}, fs::File, io::{BufReader, BufRead, BufWriter, Write, Read}, path::Path, cmp::max, time::SystemTime, collections::VecDeque};
 use byteorder::{LittleEndian,WriteBytesExt, ReadBytesExt};
 use datasize::{DataSize, data_size};
 use itertools::Itertools;
@@ -82,6 +82,7 @@ const SET_TYP: u8 = 1;
 const ADD_TYP: u8 = 2;
 const MAX_TYP: u8 = 3;
 const OR_TYP: u8 = 4;
+const TAG_TYP: u8 = 5;
 
 #[test]
 fn test_binary_representation() {
@@ -341,6 +342,12 @@ mod parsing {
                 }
                 return read_mon(&inp[2..], MAX_TYP);
             },
+            b'T' => {
+                if inp.len() < 2 || inp[0..2] != [b'a', b'g'] {
+                    panic!("Expected \"Tag\", got {:?}", String::from_utf8(orig.to_vec()).unwrap());
+                }
+                return read_mon(&inp[2..], TAG_TYP);
+            },
             _ => { panic!("Expected start of a node, but got {:?}.", String::from_utf8(orig.to_vec()).unwrap()) }
         }
     }
@@ -407,6 +414,7 @@ impl Node {
                     ADD_TYP => "Add[",
                     OR_TYP => "Or[",
                     MAX_TYP => "Max[",
+                    TAG_TYP => "Tag[",
                     _ => panic!("Bad typ.")
                 };
                 w.extend(typ_str.as_bytes());
@@ -449,7 +457,7 @@ impl Node {
                     let nodes = (0..len).map(|_| { Node::read(r, p) }).collect();
                     Node::Coll(typ, tag, nodes)
                 },
-                ADD_TYP| OR_TYP| MAX_TYP => {
+                ADD_TYP| OR_TYP| MAX_TYP | TAG_TYP => {
                     let nodes = (0..len).map(|_| {
                         let node = Node::read(r, p);
                         let val = r.read_value_mut(p);
@@ -503,7 +511,7 @@ where P: AsRef<Path>, {
 
 fn create_file<P>(filename: P) -> File
 where P: AsRef<Path>, {
-    if filename.as_ref().exists() { panic!("File already exists: {:?}", filename.as_ref().display().to_string()) }
+    if filename.as_ref().exists() { println!("File already exists: {:?}", filename.as_ref().display().to_string()) }
     let file = File::create(&filename).
         expect(&format!("Couldn't create file {:?}", filename.as_ref().display().to_string()));
     return file
@@ -551,7 +559,6 @@ where P: AsRef<Path>, {
     return (data,r)
 }
 
-
 fn write_boa<P>(filename: P, data: &[u8], r: &CReader)
 where P: AsRef<Path>, {
     let filename_str = filename.as_ref().display().to_string();
@@ -569,6 +576,66 @@ where P: AsRef<Path>, {
     writer.write_all(data).expect("Writing error.");
 }
 
+fn read_aut<P>(filename: P) -> (Vec<u8>,CReader)
+where P: AsRef<Path>, {
+    let filename_str = filename.as_ref().display().to_string();
+    if !filename_str.ends_with(".aut") {
+        panic!("File must be *.aut, but is {}", filename_str);
+    }
+    let file = File::open(&filename).
+        expect(&format!("Couldn't open file {:?}", filename.as_ref().display().to_string()));
+    let mut reader = BufReader::new(file);
+    let mut line = vec![];
+    let _n = reader.read_until(b'\n', &mut line).expect("Failure while reading file.");
+    debug_assert!(&line[0..8] == [b'd', b'e', b's', b' ', b'(', b'0', b',', b' ']);
+    let line = &line[8..];
+    let (_num_edges,m) = lexical::parse_partial::<u32,_>(&line).expect("Expected a number in aut header (1).");
+    let line = &line[m..];
+    debug_assert!(&line[0..2] == [b',', b' ']);
+    let line = &line[2..];
+    let (num_states,_m2) = lexical::parse_partial::<u32,_>(&line).expect("Expected a number in aut header (2).");
+
+    let mut states : Vec<Vec<(u64,ID)>> = vec![];
+    for _ in 0..num_states { states.push(vec![]); }
+
+    let mut label_counter = 0;
+    let mut label_map : HMap<Vec<u8>,u64> = HMap::default();
+
+    let mut line = vec![];
+    while 0 < reader.read_until(b'\n', &mut line).expect("Failure while reading file.") {
+        let (source,m1) = lexical::parse_partial::<u32,_>(&line[1..]).expect("Expected a number in aut body.");
+        line.reverse();
+        let (_target,m2) = lexical::parse_partial::<u32,_>(&line[2..]).expect("Expected a number in aut body.");
+        line.reverse();
+        let label_start = 1+m1;
+        let label_end = line.len() - 2 - m2;
+        let (target,_m2) = lexical::parse_partial::<u32,_>(&line[label_end..]).expect("Expected a number in aut body.");
+        let label_str = Vec::from(&line[label_start..label_end]);
+        // println!("label: {}", &String::from_utf8(label_str.clone()).expect("UTF8 ERROR"));
+        // Parse label
+        let label = if label_map.contains_key(&label_str) {
+                label_map[&label_str]
+            }else{
+                label_map.insert(label_str, label_counter);
+                label_counter += 1;
+                label_counter-1
+            };
+
+        states[source as usize].push((label,target));
+        line.clear();
+    }
+
+    let mut w = CWriter::new();
+
+    for state in states {
+        let trans : Vec<(Node,u64)> = state.iter().map(|(a,b)| { (Node::State(*b), *a) }).collect();
+        let node = Node::Mon(TAG_TYP, 0, trans);
+        node.write(&mut w);
+    }
+
+    w.finish()
+}
+
 fn convert_file(filename: &str) {
     if filename.ends_with(".boa") {
         let new_filename = [&filename[0..filename.len()-4],".boa.txt"].concat();
@@ -577,6 +644,10 @@ fn convert_file(filename: &str) {
     } else if filename.ends_with(".boa.txt") {
         let new_filename = [&filename[0..filename.len()-8],".boa"].concat();
         let (data,r) = read_boa_txt(filename);
+        write_boa(new_filename, &data, &r);
+    } else if filename.ends_with(".aut") {
+        let new_filename = [&filename[0..filename.len()-4],".boa"].concat();
+        let (data,r) = read_aut(filename);
         write_boa(new_filename, &data, &r);
     } else {
         panic!("Unknown file type: {}", filename)
@@ -590,6 +661,7 @@ fn test_convert_file() {
     convert_file("tests/test1_converted.boa");
     convert_file("tests/test1.boa.txt");
 }
+
 
 //======================//
 // Partition refinement //
@@ -624,7 +696,7 @@ impl Coalg {
                             iter(p,r,f)
                         }
                     },
-                    ADD_TYP|MAX_TYP|OR_TYP => {
+                    ADD_TYP|MAX_TYP|OR_TYP|TAG_TYP => {
                         for _ in 0..len {
                             iter(p,r,f);
                             r.read_value_mut( p);
@@ -781,6 +853,20 @@ unsafe fn canonicalize_node_unsafe<'a>(mut p : *const u8, r: &CReader, ids: &[ID
                 _ => panic!("Unreachable")
             }
         },
+        TAG_TYP => {
+            let mut repr : Vec<u64> = (0..len).map(|_| {
+                let (sig, p2) = canonicalize_unsafe(p, r, ids);
+                let (w,p3) = r.read_value(p2);
+                p = p3;
+                // (sig,w)
+                let mut h = new_hasher();
+                sig.hash(&mut h);
+                w.hash(&mut h);
+                h.finish()
+            }).collect();
+            repr.sort_unstable();
+            for &sig in repr.iter().dedup() { sig.hash(&mut hasher); }
+        },
         _ => panic!("Unknown typ.")
     }
     return (hasher.finish(), p);
@@ -841,6 +927,41 @@ unsafe fn canonicalize_node_unsafe64<'a>(mut p : *const u8, r: &CReader, ids: &[
                 MAX_TYP => hash_with_op(&mut repr, &mut hasher, |a,b| max(a,b)),
                 _ => panic!("Unreachable")
             }
+        },
+        TAG_TYP => {
+            let mut repr: Vec<(u64,u64)> = (0..len).map(|_| {
+                let (sig, p2) = canonicalize_unsafe64(p, r, ids);
+
+                // let x = *(p as *const u32);
+                // let w = get_noncompressed32(x);
+                // let p2 = p.add(4);
+                // // let (w,p2) = r.read_node(p);
+                // let sig = ids[get_state(w) as usize] as u64;
+
+                // unsafe fn read_node(self: &Self, data: *const u8) -> (u32, *const u8) {
+                //     let x = *(data as *const u32);
+                //     if is_compressed32(x) { (self.headers[get_compressed32(x) as usize], data.add(1)) }
+                //     else { (get_noncompressed32(x), data.add(4)) }
+                // }
+                // unsafe fn canonicalize_unsafe64<'a>(p : *const u8, r: &CReader, ids: &[u64]) -> (u64, *const u8) {
+                //     let (w,p) = r.read_node(p);
+                //     if is_state(w) {
+                //         return (ids[get_state(w) as usize] as u64, p);
+                //     } else {
+                //         return canonicalize_node_unsafe64(p, r, ids, get_header(w));
+                //     }
+                // }
+
+                let (w,p3) = r.read_value(p2);
+                p = p3;
+                (sig,w)
+                // let mut h = new_hasher();
+                // sig.hash(&mut h);
+                // w.hash(&mut h);
+                // h.finish()
+            }).collect();
+            repr.sort_unstable();
+            for &sig in repr.iter().dedup() { sig.hash(&mut hasher); }
         },
         _ => panic!("Unknown typ.")
     }
@@ -916,6 +1037,16 @@ unsafe fn canonicalize_node_unsafe_init<'a>(mut p : *const u8, r: &CReader, w: u
                 MAX_TYP => hash_with_op(&mut repr, &mut hasher, |a,b| max(a,b)),
                 _ => panic!("Unreachable")
             }
+        },
+        TAG_TYP => {
+            let mut repr: Vec<(u64,u64)> = (0..len).map(|_| {
+                let (sig, p2) = canonicalize_unsafe_init(p, r);
+                let (w,p3) = r.read_value(p2);
+                p = p3;
+                (sig,w)
+            }).collect();
+            repr.sort_unstable();
+            for &sig in repr.iter().dedup() { sig.hash(&mut hasher); }
         },
         _ => panic!("Unknown typ.")
     }
@@ -1026,7 +1157,6 @@ where A:Ord+Copy {
 
 #[test]
 fn test_renumber_sort() {
-    // assert_eq!(renumber_sort(&vec![3,1,3,1,5,3,0,1]), vec![0,1,0,1,2,0,3,1]);
     assert_eq!(renumber_sort(&vec![3,1,3,1,5,3,0,1]), vec![0,1,0,1,3,0,2
     ,1]);
 }
@@ -1103,7 +1233,7 @@ struct DirtyPartition {
     position: Vec<u32>, // position of each state in partition array
     partition_id: Vec<ID>, // partition of each state
     partition: Vec<(u32,u32,u32)>, // vector of partitions (start, mid, end) where the states in start..mid are mid and mid..end are clean
-    worklist: Vec<u32>, // worklist of partitions
+    worklist: VecDeque<u32>, // worklist of partitions
 }
 
 impl DirtyPartition {
@@ -1113,13 +1243,32 @@ impl DirtyPartition {
             position: (0..num_states).collect(),
             partition_id: vec![0;num_states as usize],
             partition: vec![(0, 0, num_states)], // for partition (start, mid, end), the states start..mid are clean and mid..end are dirty
-            worklist: vec![0]
+            worklist: VecDeque::from(vec![0])
         }
     }
 
     /// Mark the state as dirty, putting its partition on the worklist if necessary
     /// Time complexity: O(1)
     fn mark_dirty(self: &mut DirtyPartition, state: State) {
+        // unsafe {
+        //     let id = *self.partition_id.get_unchecked(state as usize);
+        //     let pos = *self.position.get_unchecked(state as usize);
+        //     let (start, mid, end) = *self.partition.get_unchecked(id as usize);
+        //     // println!("mark_dirty(_,{}): id={}, pos={}, part={:?}", state, id, pos, (start,mid,end));
+        //     if end - start <= 1 { return } // don't need to mark states dirty if they are in a singleton partition
+        //     if mid <= pos { // state is already dirty
+        //         return
+        //     }
+        //     if mid == end { // no dirty states in partition yet, so put it onto worklist
+        //         self.worklist.push_back(id)
+        //     }
+        //     self.partition.get_unchecked_mut(id as usize).1 -= 1; // decrement the dirty states marker to make space
+        //     let other_state = *self.buffer.get_unchecked(mid as usize - 1); // the state that we will swap
+        //     *self.position.get_unchecked_mut(other_state as usize) = pos;
+        //     *self.position.get_unchecked_mut(state as usize) = mid;
+        //     *self.buffer.get_unchecked_mut(pos as usize) = other_state;
+        //     *self.buffer.get_unchecked_mut(mid as usize - 1) = state;
+        // }
         let id = self.partition_id[state as usize];
         let pos = self.position[state as usize];
         let (start, mid, end) = self.partition[id as usize];
@@ -1129,12 +1278,12 @@ impl DirtyPartition {
             return
         }
         if mid == end { // no dirty states in partition yet, so put it onto worklist
-            self.worklist.push(id)
+            self.worklist.push_back(id)
         }
         self.partition[id as usize].1 -= 1; // decrement the dirty states marker to make space
         let other_state = self.buffer[mid as usize - 1]; // the state that we will swap
         self.position[other_state as usize] = pos;
-        self.position[state as usize] = mid;
+        self.position[state as usize] = mid - 1;
         self.buffer[pos as usize] = other_state;
         self.buffer[mid as usize - 1] = state;
     }
@@ -1160,8 +1309,10 @@ impl DirtyPartition {
 
         // compute the occurrence counts of each of the signatures
         let mut counts = counts_vec(&signatures);
+
         let (start,mid,end) = self.partition[partition_id as usize];
         if start < mid { counts[0] += mid - start - 1 } // add count of clean part
+        // println!("refine: {:?}", &counts);
 
         // sort the relevant part of self.buffer by signature
         // also restores invariant for self.position and self.partition_id
@@ -1170,6 +1321,7 @@ impl DirtyPartition {
 
         let mut cum_counts = cumsum(&counts);
         let original_states = self.refiners(partition_id).to_vec();
+
         for i in 0..original_states.len() {
             let sig = signatures[i];
             let state = original_states[i];
@@ -1220,15 +1372,21 @@ impl DirtyPartition {
 fn partref_nlogn_raw(data: Vec<u8>, r: CReader) -> Vec<ID> {
     // println!("===================== Starting partref_nlogn");
     // panic!("Stopped");
+    let start_time = SystemTime::now();
     print!("Initializing backrefs...");
     let coa = Coalg::new(data, r);
-    println!("done.");
+    let backrefs_time = start_time.elapsed().unwrap();
+    println!("done. ({} seconds)", backrefs_time.as_secs_f32());
     // coa.dump();
     // coa.dump_backrefs();
     println!("Num backrefs: {}", coa.backrefs.len());
     let mut iters = 0;
     let mut parts = DirtyPartition::new(coa.num_states());
-    while let Some(partition_id) = parts.worklist.pop() {
+    while let Some(partition_id) = if false { parts.worklist.pop_front() } else { parts.worklist.pop_back() } {
+
+        // let (start,mid,end) = parts.partition[partition_id as usize];
+        // println!("iteration={} #partitions={} #worklist={} clean={} dirty={}", iters, parts.partition.len(), parts.worklist.len(), mid-start, end-mid);
+
         let states = parts.refiners(partition_id);
         // println!("states = {:?}", states);
         let signatures = renumber::<u64>(&repartition_unsafe(&coa, states, &parts.partition_id));
@@ -1341,8 +1499,8 @@ fn main() {
                 println!("N log N algorithm.");
                 partref_nlogn(data, r)
             };
-            println!("Number of states: {}, Number of partitions: {}", ids.len(), ids.iter().max().unwrap()+1);
             let computation_time = start_time.elapsed().unwrap();
+            println!("Number of states: {}, Number of partitions: {}", ids.len(), ids.iter().max().unwrap()+1);
             println!("Computation took {} seconds", computation_time.as_secs_f32());
         },
     }
