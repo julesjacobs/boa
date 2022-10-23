@@ -26,10 +26,10 @@ executable = "ltsconvert"
 files = glob.glob("ltsbenchmarks/*/*/*.aut")
 algs = ["bisim", "bisim-gv", "bisim-gjkw", "bisim-sig"]
 # algs = ["bisim"]
-benchmarks = [(file, algorithm) for file in files for algorithm in algs]
+benchmarks = [(file, algorithm) for file in files for algorithm in algs for _ in range(3)]
 
 
-w = csv.writer(open("benchresultsmcrl2_rep1.csv", "w"))
+w = csv.writer(open("benchresultsmcrl2_rep456.csv", "w"))
 w.writerow(["file", "algorithm", "selfreport", "compressedsize_mb", "mem_mb", "time_sec"])
 
 
