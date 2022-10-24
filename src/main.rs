@@ -1230,10 +1230,10 @@ type State = u32;
 #[derive(DataSize)]
 struct RefinablePartition {
     buffer: Vec<State>, // buffer of states (partitioned)
-    position: Vec<u32>, // position of each state in partition array
-    state2block: Vec<ID>, // partition of each state
-    partition: Vec<(u32,u32,u32)>, // vector of partitions (start, mid, end) where the states in start..mid are mid and mid..end are clean
-    worklist: VecDeque<u32>, // worklist of partitions
+    position: Vec<u32>, // position of each state in the buffer
+    state2block: Vec<ID>, // send each state to the surrounding block
+    partition: Vec<(u32,u32,u32)>, // vector of blocks (start, mid, end) where the states in start..mid are dirty and mid..end are clean. all intervals are half-open (inclusive start, exclusive end).
+    worklist: VecDeque<u32>, // worklist: blocks with at least one dirty state
 }
 
 impl RefinablePartition {
