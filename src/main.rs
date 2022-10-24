@@ -1228,7 +1228,7 @@ fn test_index_of_max() {
 type State = u32;
 
 #[derive(DataSize)]
-struct DirtyPartition {
+struct RefinablePartition {
     buffer: Vec<State>, // buffer of states (partitioned)
     position: Vec<u32>, // position of each state in partition array
     state2block: Vec<ID>, // partition of each state
@@ -1236,9 +1236,9 @@ struct DirtyPartition {
     worklist: VecDeque<u32>, // worklist of partitions
 }
 
-impl DirtyPartition {
-    fn new(num_states: u32) -> DirtyPartition {
-        DirtyPartition {
+impl RefinablePartition {
+    fn new(num_states: u32) -> RefinablePartition {
+        RefinablePartition {
             buffer: (0..num_states).collect(),
             position: (0..num_states).collect(),
             state2block: vec![0;num_states as usize],
@@ -1249,7 +1249,7 @@ impl DirtyPartition {
 
     /// Mark the state as dirty, putting its partition on the worklist if necessary
     /// Time complexity: O(1)
-    fn mark_dirty(self: &mut DirtyPartition, state: State) {
+    fn mark_dirty(self: &mut RefinablePartition, state: State) {
         // unsafe {
         //     let id = *self.state2block.get_unchecked(state as usize);
         //     let pos = *self.position.get_unchecked(state as usize);
@@ -1291,7 +1291,7 @@ impl DirtyPartition {
     /// Determine slice of states to compute signatures for.
     /// Includes one clean state at the start if there are any clean states.
     /// Time complexity: O(1)
-    fn refiners(self: &DirtyPartition, id: ID) -> &[State] {
+    fn refiners(self: &RefinablePartition, id: ID) -> &[State] {
         let (start, mid, end) = self.partition[id as usize];
         if start == mid { // no clean states
             return &self.buffer[start as usize..end as usize]
@@ -1304,7 +1304,7 @@ impl DirtyPartition {
     /// Time complexity: O(signatures.len())
     /// Returns vector of new partition ids
     /// Signatures are assumed to be 0..n with the first starting with 0
-    fn refine(self: &mut DirtyPartition, partition_id: ID, signatures: &[u32]) -> Vec<u32> {
+    fn refine(self: &mut RefinablePartition, partition_id: ID, signatures: &[u32]) -> Vec<u32> {
         // let signatures = renumber(signatures); // Renumber signatures to be 0..n. This makes the sig of the clean states 0 if there are any.
 
         // compute the occurrence counts of each of the signatures
@@ -1381,7 +1381,7 @@ fn partref_nlogn_raw(data: Vec<u8>, r: CReader) -> Vec<ID> {
     // coa.dump_backrefs();
     println!("Num backrefs: {}", coa.backrefs.len());
     let mut iters = 0;
-    let mut partition = DirtyPartition::new(coa.num_states());
+    let mut partition = RefinablePartition::new(coa.num_states());
     while let Some(block_id) = if false { partition.worklist.pop_front() } else { partition.worklist.pop_back() } {
 
         // let (start,mid,end) = partition.partition[block_id as usize];
