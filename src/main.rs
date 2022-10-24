@@ -1231,7 +1231,7 @@ type State = u32;
 struct DirtyPartition {
     buffer: Vec<State>, // buffer of states (partitioned)
     position: Vec<u32>, // position of each state in partition array
-    partition_id: Vec<ID>, // partition of each state
+    state2block: Vec<ID>, // partition of each state
     partition: Vec<(u32,u32,u32)>, // vector of partitions (start, mid, end) where the states in start..mid are mid and mid..end are clean
     worklist: VecDeque<u32>, // worklist of partitions
 }
@@ -1241,7 +1241,7 @@ impl DirtyPartition {
         DirtyPartition {
             buffer: (0..num_states).collect(),
             position: (0..num_states).collect(),
-            partition_id: vec![0;num_states as usize],
+            state2block: vec![0;num_states as usize],
             partition: vec![(0, 0, num_states)], // for partition (start, mid, end), the states start..mid are clean and mid..end are dirty
             worklist: VecDeque::from(vec![0])
         }
@@ -1251,7 +1251,7 @@ impl DirtyPartition {
     /// Time complexity: O(1)
     fn mark_dirty(self: &mut DirtyPartition, state: State) {
         // unsafe {
-        //     let id = *self.partition_id.get_unchecked(state as usize);
+        //     let id = *self.state2block.get_unchecked(state as usize);
         //     let pos = *self.position.get_unchecked(state as usize);
         //     let (start, mid, end) = *self.partition.get_unchecked(id as usize);
         //     // println!("mark_dirty(_,{}): id={}, pos={}, part={:?}", state, id, pos, (start,mid,end));
@@ -1269,7 +1269,7 @@ impl DirtyPartition {
         //     *self.buffer.get_unchecked_mut(pos as usize) = other_state;
         //     *self.buffer.get_unchecked_mut(mid as usize - 1) = state;
         // }
-        let id = self.partition_id[state as usize];
+        let id = self.state2block[state as usize];
         let pos = self.position[state as usize];
         let (start, mid, end) = self.partition[id as usize];
         // println!("mark_dirty(_,{}): id={}, pos={}, part={:?}", state, id, pos, (start,mid,end));
@@ -1332,7 +1332,7 @@ impl DirtyPartition {
 
             if sig != largest_partition {
                 let new_sig = next_available_partition_id + if sig < largest_partition { sig } else { sig - 1 };
-                self.partition_id[state as usize] = new_sig;
+                self.state2block[state as usize] = new_sig;
             }
         }
 
@@ -1340,7 +1340,7 @@ impl DirtyPartition {
             // need to relabel the clean states
             for i in start..mid {
                 let state = self.buffer[i as usize];
-                self.partition_id[state as usize] = next_available_partition_id;
+                self.state2block[state as usize] = next_available_partition_id;
             }
         }
 
@@ -1389,7 +1389,7 @@ fn partref_nlogn_raw(data: Vec<u8>, r: CReader) -> Vec<ID> {
 
         let states = partition.refiners(block_id);
         // println!("states = {:?}", states);
-        let signatures = renumber::<u64>(&repartition_unsafe(&coa, states, &partition.partition_id));
+        let signatures = renumber::<u64>(&repartition_unsafe(&coa, states, &partition.state2block));
         // println!("partition id = {:?}, partition = {:?}, states = {:?}, sigs = {:?}", block_id, partition.partition[block_id as usize], states, &signatures);
         let new_blocks = partition.refine(block_id, &signatures);
         // println!("shrunk partition = {:?}, new partitions = {:?}, buffer = {:?}", partition.partition[block_id as usize], &new_partitions.iter().map(|pid| partition.partition[*pid as usize]).collect::<Vec<(u32,u32,u32)>>(), &partition.buffer);
@@ -1411,7 +1411,7 @@ fn partref_nlogn_raw(data: Vec<u8>, r: CReader) -> Vec<ID> {
     println!("DirtyPartitions size: {}, Coalg size: {}", mb(data_size(&partition)), mb(data_size(&coa)));
     println!("Coalg sizes {{ \n  data: {}, \n  reader: {}, \n  locs: {}, \n  backrefs: {}, \n  backrefs_locs: {} \n}}",
         mb(data_size(&coa.data)), mb(data_size(&coa.reader)), mb(&coa.locs.len()*8), mb(data_size(&coa.backrefs)), mb(data_size(&coa.backrefs_locs)));
-    return partition.partition_id;
+    return partition.state2block;
 }
 
 fn partref_nlogn(data: Vec<u8>, r: CReader) -> Vec<ID> {
