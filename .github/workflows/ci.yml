@@ -20,6 +20,11 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           toolchain: stable
+      - uses: actions/cache@v1
+        name: Cache ~/.cargo
+        with:
+          path: ~/.cargo
+          key: home-cargo-cache
       - name: Build
         uses: actions-rs/cargo@v1
         with:
