@@ -1381,37 +1381,37 @@ fn partref_nlogn_raw(data: Vec<u8>, r: CReader) -> Vec<ID> {
     // coa.dump_backrefs();
     println!("Num backrefs: {}", coa.backrefs.len());
     let mut iters = 0;
-    let mut parts = DirtyPartition::new(coa.num_states());
-    while let Some(partition_id) = if false { parts.worklist.pop_front() } else { parts.worklist.pop_back() } {
+    let mut partition = DirtyPartition::new(coa.num_states());
+    while let Some(block_id) = if false { partition.worklist.pop_front() } else { partition.worklist.pop_back() } {
 
-        // let (start,mid,end) = parts.partition[partition_id as usize];
-        // println!("iteration={} #partitions={} #worklist={} clean={} dirty={}", iters, parts.partition.len(), parts.worklist.len(), mid-start, end-mid);
+        // let (start,mid,end) = partition.partition[block_id as usize];
+        // println!("iteration={} #partitions={} #worklist={} clean={} dirty={}", iters, partition.partition.len(), partition.worklist.len(), mid-start, end-mid);
 
-        let states = parts.refiners(partition_id);
+        let states = partition.refiners(block_id);
         // println!("states = {:?}", states);
-        let signatures = renumber::<u64>(&repartition_unsafe(&coa, states, &parts.partition_id));
-        // println!("partition id = {:?}, partition = {:?}, states = {:?}, sigs = {:?}", partition_id, parts.partition[partition_id as usize], states, &signatures);
-        let new_partitions = parts.refine(partition_id, &signatures);
-        // println!("shrunk partition = {:?}, new partitions = {:?}, buffer = {:?}", parts.partition[partition_id as usize], &new_partitions.iter().map(|pid| parts.partition[*pid as usize]).collect::<Vec<(u32,u32,u32)>>(), &parts.buffer);
-        for new_partition_id in new_partitions {
+        let signatures = renumber::<u64>(&repartition_unsafe(&coa, states, &partition.partition_id));
+        // println!("partition id = {:?}, partition = {:?}, states = {:?}, sigs = {:?}", block_id, partition.partition[block_id as usize], states, &signatures);
+        let new_blocks = partition.refine(block_id, &signatures);
+        // println!("shrunk partition = {:?}, new partitions = {:?}, buffer = {:?}", partition.partition[block_id as usize], &new_partitions.iter().map(|pid| partition.partition[*pid as usize]).collect::<Vec<(u32,u32,u32)>>(), &partition.buffer);
+        for predecessor_block in new_blocks {
             // mark dirty all predecessors of states in this partition
-            // let part_debug = parts.partition[new_partition_id as usize];
-            let (start,_, end) = parts.partition[new_partition_id as usize];
-            let states = parts.buffer[start as usize..end as usize].to_vec();
+            // let part_debug = partition.partition[predecessor_block as usize];
+            let (start,_, end) = partition.partition[predecessor_block as usize];
+            let states = partition.buffer[start as usize..end as usize].to_vec();
             for state in states {
                 for &state2 in coa.state_backrefs(state) {
-                    // println!("state {} marks state {} as dirty (new partition: {:?} id: {})", state, state2, &part_debug, new_partition_id);
-                    parts.mark_dirty(state2);
+                    // println!("state {} marks state {} as dirty (new partition: {:?} id: {})", state, state2, &part_debug, predecessor_block);
+                    partition.mark_dirty(state2);
                 }
             }
         }
         iters += 1;
     }
     println!("Number of iterations: {} ", iters);
-    println!("DirtyPartitions size: {}, Coalg size: {}", mb(data_size(&parts)), mb(data_size(&coa)));
+    println!("DirtyPartitions size: {}, Coalg size: {}", mb(data_size(&partition)), mb(data_size(&coa)));
     println!("Coalg sizes {{ \n  data: {}, \n  reader: {}, \n  locs: {}, \n  backrefs: {}, \n  backrefs_locs: {} \n}}",
         mb(data_size(&coa.data)), mb(data_size(&coa.reader)), mb(&coa.locs.len()*8), mb(data_size(&coa.backrefs)), mb(data_size(&coa.backrefs_locs)));
-    return parts.partition_id;
+    return partition.partition_id;
 }
 
 fn partref_nlogn(data: Vec<u8>, r: CReader) -> Vec<ID> {
