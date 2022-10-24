@@ -25,6 +25,11 @@ jobs:
         with:
           path: ~/.cargo
           key: home-cargo-cache
+      - uses: actions/cache@v1
+        name: Cache target/
+        with:
+          path: target
+          key: cargo-target-cache
       - name: Build
         uses: actions-rs/cargo@v1
         with:
