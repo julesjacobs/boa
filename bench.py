@@ -23,8 +23,8 @@ except FileNotFoundError:
 os.system("cargo build -r")
 executable = "./target/release/boa"
 
-files = glob.glob("benchmarks/*/*.boa")
-# files = glob.glob("ltsbenchmarks/*/*/*.boa")
+# files = glob.glob("benchmarks/*/*.boa")
+files = glob.glob("ltsbenchmarks/*/*/*.boa")
 # algs = ["naive", "nlogn"]
 algs = ["nlogn"]
 benchmarks = [(file, algorithm) for file in files for algorithm in algs for _ in range(1)]
