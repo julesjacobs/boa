@@ -99,27 +99,28 @@ fn main() {
     let args = Args::parse();
     match args.action {
         Action::Convert => {
-            println!("Converting {}...", &args.file);
+            println!("file: {}", &args.file);
             convert_file(&args.file);
-            println!("Converted {}.", &args.file);
         },
         Action::Naive|Action::Nlogn => {
             let mut start_time = SystemTime::now();
-            println!("Starting parsing {}... ", &args.file);
+            println!("file: {}", &args.file);
             let (data,r) = read_boa(&args.file);
             let parsing_time = start_time.elapsed().unwrap();
-            println!("Parsing done, size: {} in {} seconds", util::mb(data.len()), parsing_time.as_secs_f32());
+            println!("size_mb: {}", util::mb(data.len()));
+            println!("parsing_time_s: {}", parsing_time.as_secs_f32());
             start_time = SystemTime::now();
             let ids = if args.action == Action::Naive {
-                println!("Naive algorithm.");
+                println!("algorithm: naive");
                 partref_naive(&data, &r)
             } else {
-                println!("N log N algorithm.");
+                println!("algorithm: nlogn");
                 partref_nlogn(data, r)
             };
             let computation_time = start_time.elapsed().unwrap();
-            println!("Number of states: {}, Number of partitions: {}", ids.len(), ids.iter().max().unwrap()+1);
-            println!("Computation took {} seconds", computation_time.as_secs_f32());
+            println!("n_states: {}", ids.len());
+            println!("n_states_min: {}", ids.iter().max().unwrap()+1);
+            println!("reduction_time_s: {}", computation_time.as_secs_f32());
         },
     }
 }

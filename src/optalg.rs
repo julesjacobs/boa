@@ -11,13 +11,13 @@ fn partref_nlogn_raw(data: Vec<u8>, r: CReader) -> Vec<u32> {
   // println!("===================== Starting partref_nlogn");
   // panic!("Stopped");
   let start_time = SystemTime::now();
-  print!("Initializing backrefs...");
+  // print!("Initializing backrefs...");
   let coa = Coalg::new(data, r);
   let backrefs_time = start_time.elapsed().unwrap();
-  println!("done. ({} seconds)", backrefs_time.as_secs_f32());
+  println!("backrefs_time_s: {}", backrefs_time.as_secs_f32());
   // coa.dump();
   // coa.dump_backrefs();
-  println!("Num backrefs: {}", coa.backrefs.len());
+  println!("m_edges: {}", coa.backrefs.len());
   let mut iters = 0;
   let mut partition = RefinablePartition::new(coa.num_states());
   while let Some(block_id) = if false { partition.worklist.pop_front() } else { partition.worklist.pop_back() } {
@@ -45,10 +45,10 @@ fn partref_nlogn_raw(data: Vec<u8>, r: CReader) -> Vec<u32> {
       }
       iters += 1;
   }
-  println!("Number of iterations: {} ", iters);
-  println!("DirtyPartitions size: {}, Coalg size: {}", util::mb(data_size(&partition)), util::mb(data_size(&coa)));
-  println!("Coalg sizes {{ \n  data: {}, \n  reader: {}, \n  locs: {}, \n  backrefs: {}, \n  backrefs_locs: {} \n}}",
-      util::mb(data_size(&coa.data)), util::mb(data_size(&coa.reader)), util::mb(&coa.locs.len()*8), util::mb(data_size(&coa.backrefs)), util::mb(data_size(&coa.backrefs_locs)));
+  println!("iters: {} ", iters);
+  // println!("coalg_input_mb: {}", util::mb(data_size(&coa.data)));
+  println!("coalg_refs_mb: {}", util::mb(data_size(&coa) - data_size(&coa.data)));
+  println!("refpart_mb: {}", util::mb(data_size(&partition)));
   return partition.state2block;
 }
 
