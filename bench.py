@@ -131,11 +131,12 @@ def merge(df1, df2):
 # Run the benchmarks or get them from benchresults/*.txt files #
 ################################################################
 
+reps = 10
 os.system("cargo build -r")
-boa_coalg = runbench("benchmarks/coalg/*/*.boa", 'boa-coalg', runboa, 2)
+boa_coalg = runbench("benchmarks/coalg/*/*.boa", 'boa-coalg', runboa, reps)
 copar_dcpr_coalg = runbench("benchmarks/coalg/*/*.boa", 'copar-dcpr-coalg', exit, 1)
-boa_lts = runbench("benchmarks/lts/*/*.boa", 'boa-lts', runboa, 2)
-mcrl_bisim_lts = runbench("benchmarks/lts/*/*.aut", 'mcrl2-bisim-lts', runmcrl2("bisim"), 2)
+boa_lts = runbench("benchmarks/lts/*/*.boa", 'boa-lts', runboa, reps)
+mcrl_bisim_lts = runbench("benchmarks/lts/*/*.aut", 'mcrl2-bisim-lts', runmcrl2("bisim"), reps)
 
 ## Slower algorithms ##
 # mcrl_bisim_gv_lts = runbench("benchmarks/lts/*/*.aut", 'mcrl2-bisim-lts', runmcrl2("bisim-gv"), 2)
@@ -242,7 +243,8 @@ def printtable(data):
   return out + "\n".join(sep(row.values()) for row in data)
 
 
-outS = ""
+outS = f"Repetitions: {reps}"
+outS += "\n"*3
 
 coalgT = [row_coalg(r) for r in coalg.values()]
 outS += printtable(coalgT)
@@ -250,7 +252,6 @@ outS += "\n"*3
 
 ltsT = [row_lts(r) for r in lts.values()]
 outS += printtable(ltsT)
-outS += "\n"*3
 
 print(outS)
 out = open("benchresults/latextables/tables.tex", "w")
