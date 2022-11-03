@@ -4,6 +4,7 @@ import re
 import subprocess
 import pprint
 import datetime
+import statistics
 
 # Try to find a working time command
 try:
@@ -38,8 +39,8 @@ def runboa(file):
 
   d = dict()
   d['file'] = file
-  d['gtime_s'] = extract(r"User time \(seconds\): ([0-9]+.[0-9]+)",time_output)
-  d['mem_mb'] = str(float(extract(r"Maximum resident set size \(kbytes\): ([0-9]+)",time_output))/1024)
+  d['gtime_s'] = float(extract(r"User time \(seconds\): ([0-9]+.[0-9]+)",time_output))
+  d['mem_mb'] = float(extract(r"Maximum resident set size \(kbytes\): ([0-9]+)",time_output))/1024
 
   stats = [
     (str, ['file', 'algorithm']),
@@ -51,27 +52,28 @@ def runboa(file):
       d[stat] = fn(extract(stat + ': (.+)\n',program_output))
   return d
 
-def runmcrl2(file):
-  algorithm = 'bisim'
-  executable = "ltsconvert"
-  d = dict()
-  d['file'] = file
-  d['algorithm'] = algorithm
-  try:
-    out, err = subprocess.Popen([time_command, "-v", executable, "--timings", "--equivalence="+algorithm, file],
-                          stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate(timeout=500)
-  except:
-    print("timeout")
-    d['timeout'] = True
+def runmcrl2(algorithm="bisim"):
+  def run(file):
+    executable = "ltsconvert"
+    d = dict()
+    d['file'] = file
+    d['algorithm'] = algorithm
+    try:
+      out, err = subprocess.Popen([time_command, "-v", executable, "--timings", "--equivalence="+algorithm, file],
+                            stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate(timeout=500)
+    except:
+      print("timeout")
+      d['timeout'] = True
+      return d
+
+    # program_output = out.decode("utf-8")
+    time_output = err.decode("utf-8")
+
+    d['gtime_s'] = float(extract(r"User time \(seconds\): ([0-9]+.[0-9]+)",time_output))
+    d['mem_mb'] = float(extract(r"Maximum resident set size \(kbytes\): ([0-9]+)",time_output))/1024
+    d['selfreport_time_s'] = float(extract("reduction: ([0-9]+.[0-9]+)",time_output))
     return d
-
-  # program_output = out.decode("utf-8")
-  time_output = err.decode("utf-8")
-
-  d['gtime_s'] = extract(r"User time \(seconds\): ([0-9]+.[0-9]+)",time_output)
-  d['mem_mb'] = str(float(extract(r"Maximum resident set size \(kbytes\): ([0-9]+)",time_output))/1024)
-  d['selfreport_time_s'] = float(extract("reduction: ([0-9]+.[0-9]+)",time_output))
-  return d
+  return run
 
 def runbench(folder, name, cmd, rep=1):
   outputfile = f"benchresults/rawdata/{name}_rep{rep}.txt"
@@ -109,8 +111,8 @@ def groupby(df, keyfn):
 def filekeyfn(row):
   if "boa-file" in row:
     return row["boa-file"][:-3]
-  if "mcrl-file" in row:
-    return row["mcrl-file"][:-3]
+  if "mcrl-bisim-file" in row:
+    return row["mcrl-bisim-file"][:-3]
   if "copar-dcpr-file" in row:
     return row["copar-dcpr-file"][:-3]
   raise Exception("Key missing!")
@@ -119,29 +121,140 @@ def prefixkeys(prefix, df):
   return [dict((prefix+key,val) for key,val in row.items()) for row in df]
 
 def merge(df1, df2):
+  keys1 = set(df1.keys())
+  keys2 = set(df2.keys())
+  if keys1 != keys2:
+    raise Exception(f"Different key sets: \n {keys1=} \n\n {keys2=}")
   return dict((key, df1[key]|df2[key]) for key in set(df1.keys()) | set(df2.keys()))
 
-# Run the benchmarks or get them from benchresults/*.txt files
+################################################################
+# Run the benchmarks or get them from benchresults/*.txt files #
+################################################################
+
 os.system("cargo build -r")
-boa_coalg = runbench("benchmarks/coalg/*/*.boa", 'boa-coalg', runboa, 10)
+boa_coalg = runbench("benchmarks/coalg/*/*.boa", 'boa-coalg', runboa, 2)
 copar_dcpr_coalg = runbench("benchmarks/coalg/*/*.boa", 'copar-dcpr-coalg', exit, 1)
-boa_lts = runbench("benchmarks/lts/*/*.boa", 'boa-lts', runboa, 10)
-mcrl_lts = runbench("benchmarks/lts/*/*.aut", 'mcrl2-lts', runmcrl2, 2)
+boa_lts = runbench("benchmarks/lts/*/*.boa", 'boa-lts', runboa, 2)
+mcrl_bisim_lts = runbench("benchmarks/lts/*/*.aut", 'mcrl2-bisim-lts', runmcrl2("bisim"), 2)
+
+## Slower algorithms ##
+# mcrl_bisim_gv_lts = runbench("benchmarks/lts/*/*.aut", 'mcrl2-bisim-lts', runmcrl2("bisim-gv"), 2)
+# mcrl_bisim_gjkw_lts = runbench("benchmarks/lts/*/*.aut", 'mcrl2-bisim-gjkw-lts', runmcrl2("bisim-gjkw"), 2)
+# mcrl_bisim_sig_lts = runbench("benchmarks/lts/*/*.aut", 'mcrl2-bisim-sig-lts', runmcrl2("bisim-sig"), 2)
 
 # Preprocess the data
 boa_coalg = groupby(prefixkeys("boa-", boa_coalg), filekeyfn)
 copar_dcpr_coalg = groupby(prefixkeys("copar-dcpr-", copar_dcpr_coalg), filekeyfn)
 boa_lts = groupby(prefixkeys("boa-", boa_lts), filekeyfn)
-mcrl_lts = groupby(prefixkeys("mcrl-", mcrl_lts), filekeyfn)
+mcrl_bisim_lts = groupby(prefixkeys("mcrl-bisim-", mcrl_bisim_lts), filekeyfn)
 
+# The data for the 2 tables
 coalg = merge(boa_coalg,copar_dcpr_coalg)
-lts = merge(boa_lts, mcrl_lts)
+lts = merge(boa_lts, mcrl_bisim_lts)
 
-print(lts)
+#####################
+# Make latex tables #
+#####################
+
+typetransl = {
+  'vasy': 'vasy',
+  'cwi': 'cwi',
+  'wta_Z': 'wta(Z)',
+  'wta_powerset': 'wta(2)',
+  'wta_Word': 'wta(W)',
+  'wlan': 'wlan',
+  'fms': 'fms'
+}
+
+def get_type(row):
+  f = row['boa-file'][0]
+  for k,v in typetransl.items():
+    if k in f: return v
+  raise Exception(f"Type not found in {f=}")
+
+def meanstdev(values):
+  if None in values: return "\\tna"
+  mean = round(statistics.mean(values),2)
+  stdev = round(statistics.stdev(values),2)
+  return f"{mean} \pm {stdev}"
+
+def meanonly(values):
+  if None in values: return "\\tna"
+  return str(round(statistics.mean(values),2))
+
+def row_coalg(row):
+  type = get_type(row)
+  n = row['boa-n_states'][0]
+  n_min = row['boa-n_states_min'][0]
+  m = row['boa-m_edges'][0]
+
+  boa_times = row['boa-gtime_s']
+  copar_times = row['copar-dcpr-copar_time_s']
+  dcpr_times = row['copar-dcpr-dcpr_time_s']
+
+  boa_mems = row['boa-mem_mb']
+  # copar_mems = row['copar-dcpr-copar_mem_mb']
+  dcpr_mems = row['copar-dcpr-dcpr_mem_mb']
+
+  return {
+    'type': type,
+    'n': n,
+    'n_min': n_min,
+    'm': m,
+    'copar_times': copar_times[0] if copar_times[0] else "\\tna",
+    'dcpr_times': dcpr_times[0],
+    'boa_times': meanstdev(boa_times),
+    # 'copar_mems': '\\approx 16000',
+    'dcpr_mems': str(dcpr_mems[0]) + "\\tnodes",
+    'boa_mems': meanonly(boa_mems),
+  }
+
+def row_lts(row):
+  type = get_type(row)
+  n = row['boa-n_states'][0]
+  n_min = row['boa-n_states_min'][0]
+  m = row['boa-m_edges'][0]
+
+  boa_times = row['boa-gtime_s']
+  mcrl_times = row['mcrl-bisim-selfreport_time_s']
+
+  boa_mems = row['boa-mem_mb']
+  mcrl_mems = row['mcrl-bisim-mem_mb']
+
+  return {
+    'type': type,
+    'n': n,
+    'n_min': n_min,
+    'm': m,
+    'mcrl_times': meanstdev(mcrl_times),
+    'boa_times': meanstdev(boa_times),
+    # 'copar_mems': '\\approx 16000',
+    'mcrl_mems': meanonly(mcrl_mems),
+    'boa_mems': meanonly(boa_mems),
+  }
 
 
+def printtable(data):
+  data = sorted(data, key=lambda r: (r['type'], r['n']))
+  row0 = data[0].keys()
+  sep = lambda vs: " & ".join([str(v).rjust(15) for v in vs])+" \\\\"
+  out = sep(row0) + "\n"
+  return out + "\n".join(sep(row.values()) for row in data)
 
 
+outS = ""
+
+coalgT = [row_coalg(r) for r in coalg.values()]
+outS += printtable(coalgT)
+outS += "\n"*3
+
+ltsT = [row_lts(r) for r in lts.values()]
+outS += printtable(ltsT)
+outS += "\n"*3
+
+print(outS)
+out = open("benchresults/latextables/tables.tex", "w")
+out.write(outS)
 
 
 
