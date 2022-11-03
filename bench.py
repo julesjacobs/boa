@@ -74,6 +74,11 @@ def runmcrl2(file):
   return d
 
 def runbench(folder, name, cmd, rep=1):
+  outputfile = f"benchresults/rawdata/{name}_rep{rep}.txt"
+  if os.path.exists(outputfile):
+    df = eval(open(outputfile, "r").read())
+    return df
+
   files = glob.glob(folder)
   benchmarks = [file for file in files for _ in range(rep)]
   df = []
@@ -86,10 +91,117 @@ def runbench(folder, name, cmd, rep=1):
     print(d)
 
   nows = datetime.datetime.now().strftime("%Y-%m-%d__%H:%M:%S")
-  f = open(f"benchresults/{name}__rep{rep}__{nows}.txt", "w")
+  f = open(outputfile, "w")
   f.write(pprint.pformat(df))
+  return df
 
+def groupby(df, keyfn):
+  out = dict()
+  for row in df:
+    k = keyfn(row)
+    if k not in out: out[k] = dict()
+    d = out[k]
+    for key in row:
+      if key not in d: d[key] = []
+      d[key].append(row[key])
+  return out
+
+def filekeyfn(row):
+  if "boa-file" in row:
+    return row["boa-file"][:-3]
+  if "mcrl-file" in row:
+    return row["mcrl-file"][:-3]
+  if "copar-dcpr-file" in row:
+    return row["copar-dcpr-file"][:-3]
+  raise Exception("Key missing!")
+
+def prefixkeys(prefix, df):
+  return [dict((prefix+key,val) for key,val in row.items()) for row in df]
+
+def merge(df1, df2):
+  return dict((key, df1[key]|df2[key]) for key in set(df1.keys()) | set(df2.keys()))
+
+# Run the benchmarks or get them from benchresults/*.txt files
 os.system("cargo build -r")
-# runbench("benchmarks/*/*.boa", 'boa-coalg', runboa, 10)
-runbench("ltsbenchmarks/*/*/*.boa", 'boa-lts', runboa, 10)
-# runbench("ltsbenchmarks/*/*/*.aut", 'mcrl2-lts', runmcrl2, 2)
+boa_coalg = runbench("benchmarks/coalg/*/*.boa", 'boa-coalg', runboa, 10)
+copar_dcpr_coalg = runbench("benchmarks/coalg/*/*.boa", 'copar-dcpr-coalg', exit, 1)
+boa_lts = runbench("benchmarks/lts/*/*.boa", 'boa-lts', runboa, 10)
+mcrl_lts = runbench("benchmarks/lts/*/*.aut", 'mcrl2-lts', runmcrl2, 2)
+
+# Preprocess the data
+boa_coalg = groupby(prefixkeys("boa-", boa_coalg), filekeyfn)
+copar_dcpr_coalg = groupby(prefixkeys("copar-dcpr-", copar_dcpr_coalg), filekeyfn)
+boa_lts = groupby(prefixkeys("boa-", boa_lts), filekeyfn)
+mcrl_lts = groupby(prefixkeys("mcrl-", mcrl_lts), filekeyfn)
+
+coalg = merge(boa_coalg,copar_dcpr_coalg)
+lts = merge(boa_lts, mcrl_lts)
+
+print(lts)
+
+
+
+
+
+
+
+
+
+# \begin{tabular}{>{\bfseries}c>{\bfseries}r@{\hskip 1.5cm}rrr@{\hskip 1.5cm}rr}
+#   % \toprule
+#                         \multicolumn{2}{l}{\thead{benchmark}}         &\multicolumn{3}{l}{\thead{time (s)}} & \multicolumn{2}{c}{\thead{memory (MB)}} \\ \toprule
+#   \thead{type}            &\thead{n}&  \copar{} & \distr{} &   \ours{} &        \distr{} &     \ours{} \\
+#   \toprule    \tc{5}{fms} & 35910   &      4 &     2 &   0.01 &    13\tnodes &     6 \\
+#                           & 152712  &     17 &     8 &   0.08 &    62\tnodes &    20 \\
+#                           & 537768  &     68 &    26 &   0.41 &   163\tnodes &    71 \\
+#                           & 1639440 &    232 &    84 &   1.12 &   514\tnodes &   196 \\
+#                           & 4459455 &   \tna &   406 &   4.47 &  1690\tnodes &   582 \\
+#   \midrule   \tc{3}{wlan} & 248503  &     39 &   297 &   0.11 &    90\tnodes &    15 \\
+#                           & 607727  &    105 &   855 &   0.28 &   147\tnodes &    42 \\
+#                           & 1632799 &   \tna &  2960 &   0.79 &   379\tnodes &    93 \\
+#   \midrule \tc{6}{wta(W)} & 83431   &    642 &    52 &   0.76 &   663\tnodes &   143 \\
+#                           & 92615   &    511 &    61 &   1.14 &   849\tnodes &   194 \\
+#                           & 94425   &    528 &    59 &   0.73 &   639\tnodes &   124 \\
+#                           & 134082  &    471 &    76 &   0.91 &   675\tnodes &   125 \\
+#                           & 152107  &    566 &    79 &   0.74 &   642\tnodes &    83 \\
+#                           & 944250  &   \tna &   675 &  11.96 &  6786\tnodes &  1228 \\
+#   \midrule \tc{6}{wta(Z)} & 92879   &    463 &    56 &   0.66 &   754\tnodes &   161 \\
+#                           & 94451   &    445 &    61 &   0.80 &   871\tnodes &   200 \\
+#                           & 100799  &    391 &    64 &   0.59 &   628\tnodes &   135 \\
+#                           & 118084  &    403 &    74 &   0.61 &   633\tnodes &   113 \\
+#                           & 156913  &    438 &    82 &   0.48 &   677\tnodes &    92 \\
+#                           & 1007990 &   \tna &   645 &  16.75 &  5644\tnodes &  1325 \\
+#   \midrule \tc{6}{wta(2)} & 86852   &    537 &    71 &   0.84 &   701\tnodes &   178 \\
+#                           & 92491   &    723 &    67 &   0.81 &   728\tnodes &   154 \\
+#                           & 134207  &    689 &   113 &   0.95 &   825\tnodes &   175 \\
+#                           & 138000  &    467 &   129 &   0.92 &   715\tnodes &   124 \\
+#                           & 154863  &    449 &   160 &   0.81 &   621\tnodes &    79 \\
+#                           & 1300000 &   \tna &  1377 &  23.35 &  7092\tnodes &  1647 \\
+# \bottomrule
+# \end{tabular}
+
+
+# \begin{tabular}{>{\bfseries}c>{\bfseries}r>{\bfseries}r@{\hskip 1.5cm}rr@{\hskip 1.5cm}rr}
+#   % \toprule
+#                         \multicolumn{3}{l}{\thead{benchmark}}         &\multicolumn{2}{l}{\thead{time (s)}} & \multicolumn{2}{c}{\thead{memory (MB)}} \\ \toprule
+#   \thead{type}            &\thead{n} &\thead{n$_{min}$} & \mcrl{} &   \ours{} &        \mcrl{} &     \ours{} \\
+#   \toprule    \tc{5}{cwi} & 566640    & 15518   & 5.3   & 0.4  & 408   & 58 \\
+#                           & 2165446   & 31906   & 9.6   & 1.4  & 978   & 164 \\
+#                           & 2416632   & 95610   & 15.0  & 1.4  & 1772  & 249 \\
+#                           & 7838608   & 966470  & 221.7 & 15.8 & 5777  & 814 \\
+#                           & 33949609  & 122035  & 281.3 & 31.5 & 16673 & 2776 \\
+#   \midrule  \tc{12}{vasy} & 164865    & 1136    & 1.7   & 0.2  & 162   & 23 \\
+#                           & 66929     & 66929   & 2.3   & 0.1  & 275   & 18 \\
+#                           & 65537     & 65536   & 5.8   & 0.1  & 554   & 28 \\
+#                           & 1112490   & 265     & 8.7   & 0.7  & 579   & 94 \\
+#                           & 6120718   & 5199    & 15.1  & 2.2  & 1297  & 326 \\
+#                           & 574057    & 3577    & 16.6  & 2.1  & 1278  & 141 \\
+#                           & 2581374   & 2581374 & 28.1  & 1.7  & 2691  & 274 \\
+#                           & 4220790   & 1356477 & 32.9  & 2.5  & 2068  & 312 \\
+#                           & 6020550   & 7168    & 32.3  & 3.1  & 2124  & 521 \\
+#                           & 4338672   & 2581374 & 37.4  & 2.9  & 3085  & 350 \\
+#                           & 1102693   & 882341  & 53.6  & 6.1  & 2768  & 620 \\
+#                           & 1232370   & 996774  & 59.1  & 7.0  & 3103  & 734 \\
+#                           & 8082905   & 408     & 70.0  & 3.6  & 4313  & 732 \\
+# \bottomrule
+# \end{tabular}
