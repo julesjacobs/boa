@@ -1,53 +1,53 @@
-file,algorithm,num_states,mem_mb,time_sec
-"benchmarks/large/wta_Word,or_0,0,0,4_47212500_50_944250_32.boa",distr,944250,6786,675
-"benchmarks/large/wta_Word,or_0,0,0,4_47212500_50_944250_32.boa",copar,944250,NA,NA
-"benchmarks/large/wta_Z,max_0,0,0,4_50399500_50_1007990_32.boa",distr,1007990,5644,645
-"benchmarks/large/wta_Z,max_0,0,0,4_50399500_50_1007990_32.boa",copar,1007990,NA,NA
-"benchmarks/large/wta_powerset_0,0,0,4_65000000_2_1300000_32.boa",distr,1300000,7092,1377
-"benchmarks/large/wta_powerset_0,0,0,4_65000000_2_1300000_32.boa",copar,1300000,NA,NA
-"benchmarks/compare-copar-same/wta_powerset_0,4_7743150_2_154863_32.boa",distr,154863,621,160
-"benchmarks/compare-copar-same/wta_powerset_0,4_7743150_2_154863_32.boa",copar,154863,NA,449
-"benchmarks/compare-copar-same/wta_Z,max_0,4_7845650_50_156913_32.boa",distr,156913,677,82
-"benchmarks/compare-copar-same/wta_Z,max_0,4_7845650_50_156913_32.boa",copar,156913,NA,438
-"benchmarks/compare-copar-same/wta_powerset_0,0,0,0,4_4624550_2_92491_32.boa",distr,92491,728,67
-"benchmarks/compare-copar-same/wta_powerset_0,0,0,0,4_4624550_2_92491_32.boa",copar,92491,NA,723
-"benchmarks/compare-copar-same/wta_powerset_0,0,4_6900000_2_138000_32.boa",distr,138000,715,129
-"benchmarks/compare-copar-same/wta_powerset_0,0,4_6900000_2_138000_32.boa",copar,138000,NA,467
-"benchmarks/compare-copar-same/wta_powerset_0,0,0,4_6710350_2_134207_32.boa",distr,134207,825,113
-"benchmarks/compare-copar-same/wta_powerset_0,0,0,4_6710350_2_134207_32.boa",copar,134207,NA,689
-"benchmarks/compare-copar-same/wta_Word,or_0,0,0,4_4721250_50_94425_32.boa",distr,94425,639,59
-"benchmarks/compare-copar-same/wta_Word,or_0,0,0,4_4721250_50_94425_32.boa",copar,94425,NA,528
-"benchmarks/compare-copar-same/wta_Word,or_0,4_7605350_50_152107_32.boa",distr,152107,642,79
-"benchmarks/compare-copar-same/wta_Word,or_0,4_7605350_50_152107_32.boa",copar,152107,NA,566
-"benchmarks/compare-copar-same/wta_Z,max_0,0,0,0,4_4643950_50_92879_32.boa",distr,92879,754,56
-"benchmarks/compare-copar-same/wta_Z,max_0,0,0,0,4_4643950_50_92879_32.boa",copar,92879,NA,463
-"benchmarks/compare-copar-same/wta_Word,or_0,0,4_6704100_50_134082_32.boa",distr,134082,675,76
-"benchmarks/compare-copar-same/wta_Word,or_0,0,4_6704100_50_134082_32.boa",copar,134082,NA,471
-"benchmarks/compare-copar-same/wta_Word,or_0,0,0,0,4_4171550_50_83431_32.boa",distr,83431,663,52
-"benchmarks/compare-copar-same/wta_Word,or_0,0,0,0,4_4171550_50_83431_32.boa",copar,83431,NA,642
-"benchmarks/compare-copar-same/wta_Z,max_0,0,0,4_5039950_50_100799_32.boa",distr,100799,628,64
-"benchmarks/compare-copar-same/wta_Z,max_0,0,0,4_5039950_50_100799_32.boa",copar,100799,NA,391
-"benchmarks/compare-copar-same/wta_powerset_0,0,0,0,0,4_4342600_2_86852_32.boa",distr,86852,701,71
-"benchmarks/compare-copar-same/wta_powerset_0,0,0,0,0,4_4342600_2_86852_32.boa",copar,86852,NA,537
-"benchmarks/compare-copar-same/wta_Z,max_0,0,0,0,0,4_4722550_50_94451_32.boa",distr,94451,871,61
-"benchmarks/compare-copar-same/wta_Z,max_0,0,0,0,0,4_4722550_50_94451_32.boa",copar,94451,NA,445
-"benchmarks/compare-copar-same/wta_Z,max_0,0,4_5904200_50_118084_32.boa",distr,118084,633,74
-"benchmarks/compare-copar-same/wta_Z,max_0,0,4_5904200_50_118084_32.boa",copar,118084,NA,403
-"benchmarks/compare-copar-same/wta_Word,or_0,0,0,0,0,4_4630750_50_92615_32.boa",distr,92615,849,61
-"benchmarks/compare-copar-same/wta_Word,or_0,0,0,0,0,4_4630750_50_92615_32.boa",copar,92615,NA,511
-benchmarks/fms/fms.sm_n=4_35910_237120_roundrobin_32.boa,distr,35910,13,2
-benchmarks/fms/fms.sm_n=4_35910_237120_roundrobin_32.boa,copar,35910,NA,4
-benchmarks/fms/fms.sm_n=5_152712_1111482_roundrobin_32.boa,distr,152712,62,8
-benchmarks/fms/fms.sm_n=5_152712_1111482_roundrobin_32.boa,copar,152712,NA,17
-benchmarks/fms/fms.sm_n=6_537768_4205670_roundrobin_32.boa,distr,537768,163,26
-benchmarks/fms/fms.sm_n=6_537768_4205670_roundrobin_32.boa,copar,537768,NA,68
-benchmarks/fms/fms.sm_n=7_1639440_13552968_roundrobin_32.boa,distr,1639440,514,84
-benchmarks/fms/fms.sm_n=7_1639440_13552968_roundrobin_32.boa,copar,1639440,NA,232
-benchmarks/fms/fms.sm_n=8_4459455_38533968_roundrobin_32.boa,distr,4459455,1690,406
-benchmarks/fms/fms.sm_n=8_4459455_38533968_roundrobin_32.boa,copar,4459455,NA,NA
-"benchmarks/wlan/wlan0_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_582327_771088_roundrobin_32.boa",distr,248503,90,297
-"benchmarks/wlan/wlan1_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_1408676_1963522_roundrobin_32.boa",distr,607727,147,855
-"benchmarks/wlan/wlan2_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_1632799_5456481_roundrobin_32.boa",distr,1632799,379,2960
-"benchmarks/wlan/wlan0_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_582327_771088_roundrobin_32.boa",copar,248503,NA,39
-"benchmarks/wlan/wlan1_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_1408676_1963522_roundrobin_32.boa",copar,607727,NA,105
-"benchmarks/wlan/wlan2_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_1632799_5456481_roundrobin_32.boa",copar,1632799,NA,NA
+file                                                                                                     ,algorithm ,num_states ,mem_mb ,time_sec
+"benchmarks/large/wta_Word,or_0,0,0,4_47212500_50_944250_32.boa"                                         ,distr     ,    944250 ,6786   ,675
+"benchmarks/large/wta_Word,or_0,0,0,4_47212500_50_944250_32.boa"                                         ,copar     ,    944250 ,NA     ,NA
+"benchmarks/large/wta_Z,max_0,0,0,4_50399500_50_1007990_32.boa"                                          ,distr     ,   1007990 ,5644   ,645
+"benchmarks/large/wta_Z,max_0,0,0,4_50399500_50_1007990_32.boa"                                          ,copar     ,   1007990 ,NA     ,NA
+"benchmarks/large/wta_powerset_0,0,0,4_65000000_2_1300000_32.boa"                                        ,distr     ,   1300000 ,7092   ,1377
+"benchmarks/large/wta_powerset_0,0,0,4_65000000_2_1300000_32.boa"                                        ,copar     ,   1300000 ,NA     ,NA
+"benchmarks/compare-copar-same/wta_powerset_0,4_7743150_2_154863_32.boa"                                 ,distr     ,    154863 ,621    ,160
+"benchmarks/compare-copar-same/wta_powerset_0,4_7743150_2_154863_32.boa"                                 ,copar     ,    154863 ,NA     ,449
+"benchmarks/compare-copar-same/wta_Z,max_0,4_7845650_50_156913_32.boa"                                   ,distr     ,    156913 ,677    ,82
+"benchmarks/compare-copar-same/wta_Z,max_0,4_7845650_50_156913_32.boa"                                   ,copar     ,    156913 ,NA     ,438
+"benchmarks/compare-copar-same/wta_powerset_0,0,0,0,4_4624550_2_92491_32.boa"                            ,distr     ,     92491 ,728    ,67
+"benchmarks/compare-copar-same/wta_powerset_0,0,0,0,4_4624550_2_92491_32.boa"                            ,copar     ,     92491 ,NA     ,723
+"benchmarks/compare-copar-same/wta_powerset_0,0,4_6900000_2_138000_32.boa"                               ,distr     ,    138000 ,715    ,129
+"benchmarks/compare-copar-same/wta_powerset_0,0,4_6900000_2_138000_32.boa"                               ,copar     ,    138000 ,NA     ,467
+"benchmarks/compare-copar-same/wta_powerset_0,0,0,4_6710350_2_134207_32.boa"                             ,distr     ,    134207 ,825    ,113
+"benchmarks/compare-copar-same/wta_powerset_0,0,0,4_6710350_2_134207_32.boa"                             ,copar     ,    134207 ,NA     ,689
+"benchmarks/compare-copar-same/wta_Word,or_0,0,0,4_4721250_50_94425_32.boa"                              ,distr     ,     94425 ,639    ,59
+"benchmarks/compare-copar-same/wta_Word,or_0,0,0,4_4721250_50_94425_32.boa"                              ,copar     ,     94425 ,NA     ,528
+"benchmarks/compare-copar-same/wta_Word,or_0,4_7605350_50_152107_32.boa"                                 ,distr     ,    152107 ,642    ,79
+"benchmarks/compare-copar-same/wta_Word,or_0,4_7605350_50_152107_32.boa"                                 ,copar     ,    152107 ,NA     ,566
+"benchmarks/compare-copar-same/wta_Z,max_0,0,0,0,4_4643950_50_92879_32.boa"                              ,distr     ,     92879 ,754    ,56
+"benchmarks/compare-copar-same/wta_Z,max_0,0,0,0,4_4643950_50_92879_32.boa"                              ,copar     ,     92879 ,NA     ,463
+"benchmarks/compare-copar-same/wta_Word,or_0,0,4_6704100_50_134082_32.boa"                               ,distr     ,    134082 ,675    ,76
+"benchmarks/compare-copar-same/wta_Word,or_0,0,4_6704100_50_134082_32.boa"                               ,copar     ,    134082 ,NA     ,471
+"benchmarks/compare-copar-same/wta_Word,or_0,0,0,0,4_4171550_50_83431_32.boa"                            ,distr     ,     83431 ,663    ,52
+"benchmarks/compare-copar-same/wta_Word,or_0,0,0,0,4_4171550_50_83431_32.boa"                            ,copar     ,     83431 ,NA     ,642
+"benchmarks/compare-copar-same/wta_Z,max_0,0,0,4_5039950_50_100799_32.boa"                               ,distr     ,    100799 ,628    ,64
+"benchmarks/compare-copar-same/wta_Z,max_0,0,0,4_5039950_50_100799_32.boa"                               ,copar     ,    100799 ,NA     ,391
+"benchmarks/compare-copar-same/wta_powerset_0,0,0,0,0,4_4342600_2_86852_32.boa"                          ,distr     ,     86852 ,701    ,71
+"benchmarks/compare-copar-same/wta_powerset_0,0,0,0,0,4_4342600_2_86852_32.boa"                          ,copar     ,     86852 ,NA     ,537
+"benchmarks/compare-copar-same/wta_Z,max_0,0,0,0,0,4_4722550_50_94451_32.boa"                            ,distr     ,     94451 ,871    ,61
+"benchmarks/compare-copar-same/wta_Z,max_0,0,0,0,0,4_4722550_50_94451_32.boa"                            ,copar     ,     94451 ,NA     ,445
+"benchmarks/compare-copar-same/wta_Z,max_0,0,4_5904200_50_118084_32.boa"                                 ,distr     ,    118084 ,633    ,74
+"benchmarks/compare-copar-same/wta_Z,max_0,0,4_5904200_50_118084_32.boa"                                 ,copar     ,    118084 ,NA     ,403
+"benchmarks/compare-copar-same/wta_Word,or_0,0,0,0,0,4_4630750_50_92615_32.boa"                          ,distr     ,     92615 ,849    ,61
+"benchmarks/compare-copar-same/wta_Word,or_0,0,0,0,0,4_4630750_50_92615_32.boa"                          ,copar     ,     92615 ,NA     ,511
+benchmarks/fms/fms.sm_n=4_35910_237120_roundrobin_32.boa                                                 ,distr     ,     35910 ,13     ,2
+benchmarks/fms/fms.sm_n=4_35910_237120_roundrobin_32.boa                                                 ,copar     ,     35910 ,NA     ,4
+benchmarks/fms/fms.sm_n=5_152712_1111482_roundrobin_32.boa                                               ,distr     ,    152712 ,62     ,8
+benchmarks/fms/fms.sm_n=5_152712_1111482_roundrobin_32.boa                                               ,copar     ,    152712 ,NA     ,17
+benchmarks/fms/fms.sm_n=6_537768_4205670_roundrobin_32.boa                                               ,distr     ,    537768 ,163    ,26
+benchmarks/fms/fms.sm_n=6_537768_4205670_roundrobin_32.boa                                               ,copar     ,    537768 ,NA     ,68
+benchmarks/fms/fms.sm_n=7_1639440_13552968_roundrobin_32.boa                                             ,distr     ,   1639440 ,514    ,84
+benchmarks/fms/fms.sm_n=7_1639440_13552968_roundrobin_32.boa                                             ,copar     ,   1639440 ,NA     ,232
+benchmarks/fms/fms.sm_n=8_4459455_38533968_roundrobin_32.boa                                             ,distr     ,   4459455 ,1690   ,406
+benchmarks/fms/fms.sm_n=8_4459455_38533968_roundrobin_32.boa                                             ,copar     ,   4459455 ,NA     ,NA
+"benchmarks/wlan/wlan0_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_582327_771088_roundrobin_32.boa"   ,distr     ,    248503 ,90     ,297
+"benchmarks/wlan/wlan1_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_1408676_1963522_roundrobin_32.boa" ,distr     ,    607727 ,147    ,855
+"benchmarks/wlan/wlan2_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_1632799_5456481_roundrobin_32.boa" ,distr     ,   1632799 ,379    ,2960
+"benchmarks/wlan/wlan0_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_582327_771088_roundrobin_32.boa"   ,copar     ,    248503 ,NA     ,39
+"benchmarks/wlan/wlan1_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_1408676_1963522_roundrobin_32.boa" ,copar     ,    607727 ,NA     ,105
+"benchmarks/wlan/wlan2_time_bounded.nm_TRANS_TIME_MAX=10,DEADLINE=100_1632799_5456481_roundrobin_32.boa" ,copar     ,   1632799 ,NA     ,NA

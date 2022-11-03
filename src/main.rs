@@ -103,13 +103,13 @@ fn main() {
             convert_file(&args.file);
         },
         Action::Naive|Action::Nlogn => {
-            let mut start_time = SystemTime::now();
+            let start_time = SystemTime::now();
             println!("file: {}", &args.file);
             let (data,r) = read_boa(&args.file);
             let parsing_time = start_time.elapsed().unwrap();
             println!("size_mb: {}", util::mb(data.len()));
             println!("parsing_time_s: {}", parsing_time.as_secs_f32());
-            start_time = SystemTime::now();
+            // start_time = SystemTime::now();
             let ids = if args.action == Action::Naive {
                 println!("algorithm: naive");
                 partref_naive(&data, &r)
@@ -117,10 +117,10 @@ fn main() {
                 println!("algorithm: nlogn");
                 partref_nlogn(data, r)
             };
-            let computation_time = start_time.elapsed().unwrap();
+            // let computation_time = start_time.elapsed().unwrap();
             println!("n_states: {}", ids.len());
             println!("n_states_min: {}", ids.iter().max().unwrap()+1);
-            println!("reduction_time_s: {}", computation_time.as_secs_f32());
+            // println!("selfreport_time_s: {}", computation_time.as_secs_f32());
         },
     }
 }

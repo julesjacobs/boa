@@ -43,7 +43,7 @@ def runboa(file):
 
   stats = [
     (str, ['file', 'algorithm']),
-    (float, ['size_mb', 'parsing_time_s', 'backrefs_time_s', 'reduction_time_s', 'coalg_refs_mb',  'refpart_mb']),
+    (float, ['size_mb', 'parsing_time_s', 'backrefs_time_s', 'selfreport_time_s', 'iter_time_s', 'coalg_refs_mb',  'refpart_mb']),
     (int, ['m_edges', 'iters', 'n_states', 'n_states_min'])
   ]
   for (fn,stattype) in stats:
@@ -68,10 +68,9 @@ def runmcrl2(file):
   # program_output = out.decode("utf-8")
   time_output = err.decode("utf-8")
 
-  d = dict()
   d['gtime_s'] = extract(r"User time \(seconds\): ([0-9]+.[0-9]+)",time_output)
   d['mem_mb'] = str(float(extract(r"Maximum resident set size \(kbytes\): ([0-9]+)",time_output))/1024)
-  d['time_selfreport_s'] = float(extract("reduction: ([0-9]+.[0-9]+)",time_output))
+  d['selfreport_time_s'] = float(extract("reduction: ([0-9]+.[0-9]+)",time_output))
   return d
 
 def runbench(folder, name, cmd, rep=1):
@@ -80,17 +79,17 @@ def runbench(folder, name, cmd, rep=1):
   df = []
   i = 0
   for file in benchmarks:
-    print(f"Running benchmark {i} out of {len(benchmarks)} for benchmark set {name}")
     i += 1
+    print(f"Running benchmark {i} out of {len(benchmarks)} for benchmark set {name}")
     d = cmd(file)
     df.append(d)
     print(d)
 
   nows = datetime.datetime.now().strftime("%Y-%m-%d__%H:%M:%S")
-  f = open(f"benchresults/boa-{name}__{nows}.txt", "w")
+  f = open(f"benchresults/{name}__rep{rep}__{nows}.txt", "w")
   f.write(pprint.pformat(df))
 
 os.system("cargo build -r")
-runbench("benchmarks/*/*.boa", 'coalg', runboa, 10)
-runbench("ltsbenchmarks/*/*/*.boa", 'lts', runboa, 10)
-runbench("ltsbenchmarks/*/*/*.aut", 'lts', runmcrl2, 10)
+# runbench("benchmarks/*/*.boa", 'boa-coalg', runboa, 10)
+runbench("ltsbenchmarks/*/*/*.boa", 'boa-lts', runboa, 10)
+# runbench("ltsbenchmarks/*/*/*.aut", 'mcrl2-lts', runmcrl2, 2)

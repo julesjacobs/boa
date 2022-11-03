@@ -20,6 +20,8 @@ fn partref_nlogn_raw(data: Vec<u8>, r: CReader) -> Vec<u32> {
   println!("m_edges: {}", coa.backrefs.len());
   let mut iters = 0;
   let mut partition = RefinablePartition::new(coa.num_states());
+
+  let start_time_iters = SystemTime::now();
   while let Some(block_id) = if false { partition.worklist.pop_front() } else { partition.worklist.pop_back() } {
 
       // let (start,mid,end) = partition.partition[block_id as usize];
@@ -49,6 +51,10 @@ fn partref_nlogn_raw(data: Vec<u8>, r: CReader) -> Vec<u32> {
   // println!("coalg_input_mb: {}", util::mb(data_size(&coa.data)));
   println!("coalg_refs_mb: {}", util::mb(data_size(&coa) - data_size(&coa.data)));
   println!("refpart_mb: {}", util::mb(data_size(&partition)));
+  let iter_time = start_time_iters.elapsed().unwrap();
+  println!("iter_time_s: {}", iter_time.as_secs_f32());
+  let selfreport_time = start_time.elapsed().unwrap();
+  println!("selfreport_time_s: {}", selfreport_time.as_secs_f32());
   return partition.state2block;
 }
 
