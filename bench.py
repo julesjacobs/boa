@@ -176,7 +176,7 @@ def get_type(row):
 def timefmt(values):
   if None in values: return "\\tna"
   mean = "{:.2f}".format(statistics.mean(values),2)
-  stdev = "{:.2f}".format(statistics.stdev(values))
+  stdev = "{:.2f}".format(max(statistics.stdev(values), 0.01))
   return f"{mean} $\pm$ {stdev}"
 
 def memfmt(values):
@@ -242,6 +242,7 @@ def printtable(data):
   out = [sep(row0)]
   lasttype = None
   for row in data:
+    if float(row['boa_times'].split()[0]) < 0.02: continue
     if row['type'] != lasttype:
       if lasttype:
         out.append("\\midrule")
