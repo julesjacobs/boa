@@ -131,7 +131,7 @@ def merge(df1, df2):
 # Run the benchmarks or get them from benchresults/*.txt files #
 ################################################################
 
-reps = 10
+reps = 2
 os.system("cargo build -r")
 boa_coalg = runbench("benchmarks/coalg/*/*.boa", 'boa-coalg', runboa, reps)
 copar_dcpr_coalg = runbench("benchmarks/coalg/*/*.boa", 'copar-dcpr-coalg', exit, 1)
@@ -173,15 +173,15 @@ def get_type(row):
     if k in f: return v
   raise Exception(f"Type not found in {f=}")
 
-def meanstdev(values):
+def timefmt(values):
   if None in values: return "\\tna"
-  mean = round(statistics.mean(values),2)
-  stdev = round(statistics.stdev(values),2)
-  return f"{mean} \pm {stdev}"
+  mean = "{:.2f}".format(statistics.mean(values),2)
+  stdev = "{:.2f}".format(statistics.stdev(values))
+  return f"{mean} $\pm$ {stdev}"
 
-def meanonly(values):
+def memfmt(values):
   if None in values: return "\\tna"
-  return str(round(statistics.mean(values),2))
+  return str(round(statistics.mean(values)))
 
 def row_coalg(row):
   type = get_type(row)
@@ -204,10 +204,10 @@ def row_coalg(row):
     'm': m,
     'copar_times': copar_times[0] if copar_times[0] else "\\tna",
     'dcpr_times': dcpr_times[0],
-    'boa_times': meanstdev(boa_times),
+    'boa_times': timefmt(boa_times),
     # 'copar_mems': '\\approx 16000',
     'dcpr_mems': str(dcpr_mems[0]) + "\\tnodes",
-    'boa_mems': meanonly(boa_mems),
+    'boa_mems': memfmt(boa_mems),
   }
 
 def row_lts(row):
@@ -227,11 +227,11 @@ def row_lts(row):
     'n': n,
     'n_min': n_min,
     'm': m,
-    'mcrl_times': meanstdev(mcrl_times),
-    'boa_times': meanstdev(boa_times),
+    'mcrl_times': timefmt(mcrl_times),
+    'boa_times': timefmt(boa_times),
     # 'copar_mems': '\\approx 16000',
-    'mcrl_mems': meanonly(mcrl_mems),
-    'boa_mems': meanonly(boa_mems),
+    'mcrl_mems': memfmt(mcrl_mems),
+    'boa_mems': memfmt(boa_mems),
   }
 
 
@@ -239,9 +239,18 @@ def printtable(data):
   data = sorted(data, key=lambda r: (r['type'], r['n']))
   row0 = data[0].keys()
   sep = lambda vs: " & ".join([str(v).rjust(15) for v in vs])+" \\\\"
-  out = sep(row0) + "\n"
-  return out + "\n".join(sep(row.values()) for row in data)
-
+  out = [sep(row0)]
+  lasttype = None
+  for row in data:
+    if row['type'] != lasttype:
+      if lasttype:
+        out.append("\\midrule")
+      else:
+        out.append("\\toprule")
+    lasttype = row['type']
+    out.append(sep(row.values()))
+  row.append("\\bottomrule")
+  return "\n".join(out)
 
 outS = f"Repetitions: {reps}"
 outS += "\n"*3
@@ -254,7 +263,7 @@ ltsT = [row_lts(r) for r in lts.values()]
 outS += printtable(ltsT)
 
 print(outS)
-out = open("benchresults/latextables/tables.tex", "w")
+out = open(f"benchresults/latextables/tables_{reps}_reps.tex", "w")
 out.write(outS)
 
 
