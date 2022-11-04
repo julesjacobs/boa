@@ -176,8 +176,8 @@ def get_type(row):
 def timefmt(values):
   if None in values: return "\\tna"
   mean = "{:.2f}".format(statistics.mean(values),2)
-  stdev = "{:.2f}".format(max(statistics.stdev(values), 0.01))
-  return f"{mean} $\pm$ {stdev}"
+  # stdev = "{:.2f}".format(max(statistics.stdev(values), 0.01))
+  return f"{mean}" # $\pm$ {stdev}"
 
 def memfmt(values):
   if None in values: return "\\tna"
@@ -208,6 +208,7 @@ def row_coalg(row):
     # 'copar_mems': '\\approx 16000',
     'dcpr_mems': str(dcpr_mems[0]) + "\\tnodes",
     'boa_mems': memfmt(boa_mems),
+    'm_per_sec': round(m / max(statistics.mean(boa_times),0.0001) / 1e6, 2)
   }
 
 def row_lts(row):
@@ -232,6 +233,7 @@ def row_lts(row):
     # 'copar_mems': '\\approx 16000',
     'mcrl_mems': memfmt(mcrl_mems),
     'boa_mems': memfmt(boa_mems),
+    'm_per_sec': round(m / max(statistics.mean(boa_times),0.0001) / 1e6, 2)
   }
 
 
@@ -250,7 +252,7 @@ def printtable(data):
         out.append("\\toprule")
     lasttype = row['type']
     out.append(sep(row.values()))
-  row.append("\\bottomrule")
+  out.append("\\bottomrule")
   return "\n".join(out)
 
 outS = f"Repetitions: {reps}"
