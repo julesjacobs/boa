@@ -1,0 +1,861 @@
+Starting parsing benchmarks/wta/wta-powerset-r1-iter0.boa...
+Parsing done, size: 21.54 MB in 0.0661847 seconds
+N log N algorithm.
+Initializing backrefs...done. (0.112395994 seconds)
+Num backrefs: 4500000
+Number of iterations: 1199
+DirtyPartitions size: 2.54 MB, Coalg size: 39.90 MB
+Coalg sizes {
+  data: 21.54 MB,
+  reader: 0.00 MB,
+  locs: 0.69 MB,
+  backrefs: 17.17 MB,
+  backrefs_locs: 0.50 MB
+}
+Number of states: 90000, Number of partitions: 90000
+Computation took 0.3886132 seconds
+Starting parsing benchmarks/wta/wta-powerset-r1-iter1.boa...
+Parsing done, size: 21.54 MB in 0.05161666 seconds
+N log N algorithm.
+Initializing backrefs...done. (0.08061741 seconds)
+Num backrefs: 4500000
+Number of iterations: 1199
+DirtyPartitions size: 2.54 MB, Coalg size: 39.90 MB
+Coalg sizes {
+  data: 21.54 MB,
+  reader: 0.00 MB,
+  locs: 0.69 MB,
+  backrefs: 17.17 MB,
+  backrefs_locs: 0.50 MB
+}
+Number of states: 90000, Number of partitions: 90000
+Computation took 0.35630575 seconds
+Starting parsing benchmarks/wta/wta-powerset-r1-iter2.boa...
+Parsing done, size: 21.54 MB in 0.079573534 seconds
+N log N algorithm.
+Initializing backrefs...done. (0.10670587 seconds)
+Num backrefs: 4500000
+Number of iterations: 1227
+DirtyPartitions size: 2.54 MB, Coalg size: 39.90 MB
+Coalg sizes {
+  data: 21.54 MB,
+  reader: 0.00 MB,
+  locs: 0.69 MB,
+  backrefs: 17.17 MB,
+  backrefs_locs: 0.50 MB
+}
+Number of states: 90000, Number of partitions: 90000
+Computation took 0.38324887 seconds
+Starting parsing benchmarks/wta/wta-powerset-r1-iter3.boa...
+Parsing done, size: 21.54 MB in 0.05679845 seconds
+N log N algorithm.
+Initializing backrefs...done. (0.09811902 seconds)
+Num backrefs: 4500000
+Number of iterations: 1279
+DirtyPartitions size: 2.54 MB, Coalg size: 39.90 MB
+Coalg sizes {
+  data: 21.54 MB,
+  reader: 0.00 MB,
+  locs: 0.69 MB,
+  backrefs: 17.17 MB,
+  backrefs_locs: 0.50 MB
+}
+Number of states: 90000, Number of partitions: 90000
+Computation took 0.37285995 seconds
+Starting parsing benchmarks/wta/wta-powerset-r1-iter4.boa...
+Parsing done, size: 21.54 MB in 0.05555332 seconds
+N log N algorithm.
+Initializing backrefs...done. (0.08045429 seconds)
+Num backrefs: 4500000
+Number of iterations: 1143
+DirtyPartitions size: 2.54 MB, Coalg size: 39.90 MB
+Coalg sizes {
+  data: 21.54 MB,
+  reader: 0.00 MB,
+  locs: 0.69 MB,
+  backrefs: 17.17 MB,
+  backrefs_locs: 0.50 MB
+}
+Number of states: 90000, Number of partitions: 90000
+Computation took 0.3531003 seconds
+Starting parsing benchmarks/wta/wta-powerset-r1-iter5.boa...
+Parsing done, size: 21.54 MB in 0.06623184 seconds
+N log N algorithm.
+Initializing backrefs...done. (0.108682774 seconds)
+Num backrefs: 4500000
+Number of iterations: 1150
+DirtyPartitions size: 2.54 MB, Coalg size: 39.90 MB
+Coalg sizes {
+  data: 21.54 MB,
+  reader: 0.00 MB,
+  locs: 0.69 MB,
+  backrefs: 17.17 MB,
+  backrefs_locs: 0.50 MB
+}
+Number of states: 90000, Number of partitions: 90000
+Computation took 0.38287762 seconds
+Starting parsing benchmarks/wta/wta-powerset-r1-iter6.boa...
+Parsing done, size: 21.54 MB in 0.06674235 seconds
+N log N algorithm.
+Initializing backrefs...done. (0.105933696 seconds)
+Num backrefs: 4500000
+Number of iterations: 1026
+DirtyPartitions size: 2.53 MB, Coalg size: 39.90 MB
+Coalg sizes {
+  data: 21.54 MB,
+  reader: 0.00 MB,
+  locs: 0.69 MB,
+  backrefs: 17.17 MB,
+  backrefs_locs: 0.50 MB
+}
+Number of states: 90000, Number of partitions: 90000
+Computation took 0.38532853 seconds
+Starting parsing benchmarks/wta/wta-powerset-r1-iter7.boa...
+Parsing done, size: 21.54 MB in 0.050420888 seconds
+N log N algorithm.
+Initializing backrefs...done. (0.075234994 seconds)
+Num backrefs: 4500000
+Number of iterations: 1179
+DirtyPartitions size: 2.54 MB, Coalg size: 39.90 MB
+Coalg sizes {
+  data: 21.54 MB,
+  reader: 0.00 MB,
+  locs: 0.69 MB,
+  backrefs: 17.17 MB,
+  backrefs_locs: 0.50 MB
+}
+Number of states: 90000, Number of partitions: 90000
+Computation took 0.35125497 seconds
+Starting parsing benchmarks/wta/wta-powerset-r1-iter8.boa...
+Parsing done, size: 21.54 MB in 0.05486985 seconds
+N log N algorithm.
+Initializing backrefs...done. (0.08138143 seconds)
+Num backrefs: 4500000
+Number of iterations: 1049
+DirtyPartitions size: 2.54 MB, Coalg size: 39.90 MB
+Coalg sizes {
+  data: 21.54 MB,
+  reader: 0.00 MB,
+  locs: 0.69 MB,
+  backrefs: 17.17 MB,
+  backrefs_locs: 0.50 MB
+}
+Number of states: 90000, Number of partitions: 90000
+Computation took 0.3519404 seconds
+Starting parsing benchmarks/wta/wta-powerset-r1-iter9.boa...
+Parsing done, size: 21.54 MB in 0.051509555 seconds
+N log N algorithm.
+Initializing backrefs...done. (0.086878866 seconds)
+Num backrefs: 4500000
+Number of iterations: 1153
+DirtyPartitions size: 2.54 MB, Coalg size: 39.90 MB
+Coalg sizes {
+  data: 21.54 MB,
+  reader: 0.00 MB,
+  locs: 0.69 MB,
+  backrefs: 17.17 MB,
+  backrefs_locs: 0.50 MB
+}
+Number of states: 90000, Number of partitions: 90000
+Computation took 0.36328238 seconds
+Starting parsing benchmarks/wta/wta-powerset-r2-iter0.boa...
+Parsing done, size: 38.71 MB in 0.08620762 seconds
+N log N algorithm.
+Initializing backrefs...done. (0.1449083 seconds)
+Num backrefs: 9000000
+Number of iterations: 524
+DirtyPartitions size: 2.53 MB, Coalg size: 74.23 MB
+Coalg sizes {
+  data: 38.71 MB,
+  reader: 0.00 MB,
+  locs: 0.69 MB,
+  backrefs: 34.33 MB,
+  backrefs_locs: 0.50 MB
+}
+Number of states: 90000, Number of partitions: 90000
+Computation took 0.48760608 seconds
+Starting parsing benchmarks/wta/wta-powerset-r2-iter1.boa...
+Parsing done, size: 38.71 MB in 0.10644308 seconds
+N log N algorithm.
+Initializing backrefs...done. (0.12408724 seconds)
+Num backrefs: 9000000
+Number of iterations: 518
+DirtyPartitions size: 2.53 MB, Coalg size: 74.23 MB
+Coalg sizes {
+  data: 38.71 MB,
+  reader: 0.00 MB,
+  locs: 0.69 MB,
+  backrefs: 34.33 MB,
+  backrefs_locs: 0.50 MB
+}
+Number of states: 90000, Number of partitions: 90000
+Computation took 0.47039 seconds
+Starting parsing benchmarks/wta/wta-powerset-r2-iter2.boa...
+Parsing done, size: 38.71 MB in 0.09149822 seconds
+N log N algorithm.
+Initializing backrefs...done. (0.14352918 seconds)
+Num backrefs: 9000000
+Number of iterations: 498
+DirtyPartitions size: 2.53 MB, Coalg size: 74.23 MB
+Coalg sizes {
+  data: 38.71 MB,
+  reader: 0.00 MB,
+  locs: 0.69 MB,
+  backrefs: 34.33 MB,
+  backrefs_locs: 0.50 MB
+}
+Number of states: 90000, Number of partitions: 90000
+Computation took 0.4866189 seconds
+Starting parsing benchmarks/wta/wta-powerset-r2-iter3.boa...
+Parsing done, size: 38.71 MB in 0.08159904 seconds
+N log N algorithm.
+Initializing backrefs...done. (0.14150089 seconds)
+Num backrefs: 9000000
+Number of iterations: 506
+DirtyPartitions size: 2.53 MB, Coalg size: 74.23 MB
+Coalg sizes {
+  data: 38.71 MB,
+  reader: 0.00 MB,
+  locs: 0.69 MB,
+  backrefs: 34.33 MB,
+  backrefs_locs: 0.50 MB
+}
+Number of states: 90000, Number of partitions: 90000
+Computation took 0.4885997 seconds
+Starting parsing benchmarks/wta/wta-powerset-r2-iter4.boa...
+Parsing done, size: 38.71 MB in 0.08606267 seconds
+N log N algorithm.
+Initializing backrefs...done. (0.14762145 seconds)
+Num backrefs: 9000000
+Number of iterations: 505
+DirtyPartitions size: 2.53 MB, Coalg size: 74.23 MB
+Coalg sizes {
+  data: 38.71 MB,
+  reader: 0.00 MB,
+  locs: 0.69 MB,
+  backrefs: 34.33 MB,
+  backrefs_locs: 0.50 MB
+}
+Number of states: 90000, Number of partitions: 90000
+Computation took 0.49042508 seconds
+Starting parsing benchmarks/wta/wta-powerset-r2-iter5.boa...
+Parsing done, size: 38.71 MB in 0.11692161 seconds
+N log N algorithm.
+Initializing backrefs...done. (0.15285867 seconds)
+Num backrefs: 9000000
+Number of iterations: 507
+DirtyPartitions size: 2.53 MB, Coalg size: 74.23 MB
+Coalg sizes {
+  data: 38.71 MB,
+  reader: 0.00 MB,
+  locs: 0.69 MB,
+  backrefs: 34.33 MB,
+  backrefs_locs: 0.50 MB
+}
+Number of states: 90000, Number of partitions: 90000
+Computation took 0.4990982 seconds
+Starting parsing benchmarks/wta/wta-powerset-r2-iter6.boa...
+Parsing done, size: 38.71 MB in 0.080259025 seconds
+N log N algorithm.
+Initializing backrefs...done. (0.14307384 seconds)
+Num backrefs: 9000000
+Number of iterations: 512
+DirtyPartitions size: 2.53 MB, Coalg size: 74.23 MB
+Coalg sizes {
+  data: 38.71 MB,
+  reader: 0.00 MB,
+  locs: 0.69 MB,
+  backrefs: 34.33 MB,
+  backrefs_locs: 0.50 MB
+}
+Number of states: 90000, Number of partitions: 90000
+Computation took 0.49365756 seconds
+Starting parsing benchmarks/wta/wta-powerset-r2-iter7.boa...
+Parsing done, size: 38.71 MB in 0.07824993 seconds
+N log N algorithm.
+Initializing backrefs...done. (0.12679578 seconds)
+Num backrefs: 9000000
+Number of iterations: 509
+DirtyPartitions size: 2.53 MB, Coalg size: 74.23 MB
+Coalg sizes {
+  data: 38.71 MB,
+  reader: 0.00 MB,
+  locs: 0.69 MB,
+  backrefs: 34.33 MB,
+  backrefs_locs: 0.50 MB
+}
+Number of states: 90000, Number of partitions: 90000
+Computation took 0.47671992 seconds
+Starting parsing benchmarks/wta/wta-powerset-r2-iter8.boa...
+Parsing done, size: 38.71 MB in 0.10257411 seconds
+N log N algorithm.
+Initializing backrefs...done. (0.12801981 seconds)
+Num backrefs: 9000000
+Number of iterations: 498
+DirtyPartitions size: 2.53 MB, Coalg size: 74.23 MB
+Coalg sizes {
+  data: 38.71 MB,
+  reader: 0.00 MB,
+  locs: 0.69 MB,
+  backrefs: 34.33 MB,
+  backrefs_locs: 0.50 MB
+}
+Number of states: 90000, Number of partitions: 90000
+Computation took 0.47999084 seconds
+Starting parsing benchmarks/wta/wta-powerset-r2-iter9.boa...
+Parsing done, size: 38.71 MB in 0.08419607 seconds
+N log N algorithm.
+Initializing backrefs...done. (0.13973117 seconds)
+Num backrefs: 9000000
+Number of iterations: 497
+DirtyPartitions size: 2.53 MB, Coalg size: 74.23 MB
+Coalg sizes {
+  data: 38.71 MB,
+  reader: 0.00 MB,
+  locs: 0.69 MB,
+  backrefs: 34.33 MB,
+  backrefs_locs: 0.50 MB
+}
+Number of states: 90000, Number of partitions: 90000
+Computation took 0.4866691 seconds
+Starting parsing benchmarks/wta/wta-powerset-r3-iter0.boa...
+Parsing done, size: 55.88 MB in 0.107622445 seconds
+N log N algorithm.
+Initializing backrefs...done. (0.18556252 seconds)
+Num backrefs: 13500000
+Number of iterations: 1060
+DirtyPartitions size: 2.54 MB, Coalg size: 108.56 MB
+Coalg sizes {
+  data: 55.88 MB,
+  reader: 0.00 MB,
+  locs: 0.69 MB,
+  backrefs: 51.50 MB,
+  backrefs_locs: 0.50 MB
+}
+Number of states: 90000, Number of partitions: 90000
+Computation took 0.5215748 seconds
+Starting parsing benchmarks/wta/wta-powerset-r3-iter1.boa...
+Parsing done, size: 55.88 MB in 0.12465724 seconds
+N log N algorithm.
+Initializing backrefs...done. (0.19610517 seconds)
+Num backrefs: 13500000
+Number of iterations: 1075
+DirtyPartitions size: 2.54 MB, Coalg size: 108.56 MB
+Coalg sizes {
+  data: 55.88 MB,
+  reader: 0.00 MB,
+  locs: 0.69 MB,
+  backrefs: 51.50 MB,
+  backrefs_locs: 0.50 MB
+}
+Number of states: 90000, Number of partitions: 90000
+Computation took 0.53962225 seconds
+Starting parsing benchmarks/wta/wta-powerset-r3-iter2.boa...
+Parsing done, size: 55.88 MB in 0.112307824 seconds
+N log N algorithm.
+Initializing backrefs...done. (0.19425745 seconds)
+Num backrefs: 13500000
+Number of iterations: 1045
+DirtyPartitions size: 2.54 MB, Coalg size: 108.56 MB
+Coalg sizes {
+  data: 55.88 MB,
+  reader: 0.00 MB,
+  locs: 0.69 MB,
+  backrefs: 51.50 MB,
+  backrefs_locs: 0.50 MB
+}
+Number of states: 90000, Number of partitions: 90000
+Computation took 0.54543626 seconds
+Starting parsing benchmarks/wta/wta-powerset-r3-iter3.boa...
+Parsing done, size: 55.88 MB in 0.115518466 seconds
+N log N algorithm.
+Initializing backrefs...done. (0.19208089 seconds)
+Num backrefs: 13500000
+Number of iterations: 1051
+DirtyPartitions size: 2.54 MB, Coalg size: 108.56 MB
+Coalg sizes {
+  data: 55.88 MB,
+  reader: 0.00 MB,
+  locs: 0.69 MB,
+  backrefs: 51.50 MB,
+  backrefs_locs: 0.50 MB
+}
+Number of states: 90000, Number of partitions: 90000
+Computation took 0.53548414 seconds
+Starting parsing benchmarks/wta/wta-powerset-r3-iter4.boa...
+Parsing done, size: 55.88 MB in 0.12090119 seconds
+N log N algorithm.
+Initializing backrefs...done. (0.20241039 seconds)
+Num backrefs: 13500000
+Number of iterations: 1077
+DirtyPartitions size: 2.54 MB, Coalg size: 108.56 MB
+Coalg sizes {
+  data: 55.88 MB,
+  reader: 0.00 MB,
+  locs: 0.69 MB,
+  backrefs: 51.50 MB,
+  backrefs_locs: 0.50 MB
+}
+Number of states: 90000, Number of partitions: 90000
+Computation took 0.5475415 seconds
+Starting parsing benchmarks/wta/wta-powerset-r3-iter5.boa...
+Parsing done, size: 55.88 MB in 0.11579758 seconds
+N log N algorithm.
+Initializing backrefs...done. (0.19113472 seconds)
+Num backrefs: 13500000
+Number of iterations: 1023
+DirtyPartitions size: 2.53 MB, Coalg size: 108.56 MB
+Coalg sizes {
+  data: 55.88 MB,
+  reader: 0.00 MB,
+  locs: 0.69 MB,
+  backrefs: 51.50 MB,
+  backrefs_locs: 0.50 MB
+}
+Number of states: 90000, Number of partitions: 90000
+Computation took 0.5271388 seconds
+Starting parsing benchmarks/wta/wta-powerset-r3-iter6.boa...
+Parsing done, size: 55.88 MB in 0.11506712 seconds
+N log N algorithm.
+Initializing backrefs...done. (0.19318624 seconds)
+Num backrefs: 13500000
+Number of iterations: 1063
+DirtyPartitions size: 2.54 MB, Coalg size: 108.56 MB
+Coalg sizes {
+  data: 55.88 MB,
+  reader: 0.00 MB,
+  locs: 0.69 MB,
+  backrefs: 51.50 MB,
+  backrefs_locs: 0.50 MB
+}
+Number of states: 90000, Number of partitions: 90000
+Computation took 0.54887414 seconds
+Starting parsing benchmarks/wta/wta-powerset-r3-iter7.boa...
+Parsing done, size: 55.88 MB in 0.118614145 seconds
+N log N algorithm.
+Initializing backrefs...done. (0.19878003 seconds)
+Num backrefs: 13500000
+Number of iterations: 1054
+DirtyPartitions size: 2.54 MB, Coalg size: 108.56 MB
+Coalg sizes {
+  data: 55.88 MB,
+  reader: 0.00 MB,
+  locs: 0.69 MB,
+  backrefs: 51.50 MB,
+  backrefs_locs: 0.50 MB
+}
+Number of states: 90000, Number of partitions: 90000
+Computation took 0.5397975 seconds
+Starting parsing benchmarks/wta/wta-powerset-r3-iter8.boa...
+Parsing done, size: 55.88 MB in 0.11428109 seconds
+N log N algorithm.
+Initializing backrefs...done. (0.1973781 seconds)
+Num backrefs: 13500000
+Number of iterations: 1053
+DirtyPartitions size: 2.54 MB, Coalg size: 108.56 MB
+Coalg sizes {
+  data: 55.88 MB,
+  reader: 0.00 MB,
+  locs: 0.69 MB,
+  backrefs: 51.50 MB,
+  backrefs_locs: 0.50 MB
+}
+Number of states: 90000, Number of partitions: 90000
+Computation took 0.5444419 seconds
+Starting parsing benchmarks/wta/wta-powerset-r3-iter9.boa...
+Parsing done, size: 55.88 MB in 0.16492051 seconds
+N log N algorithm.
+Initializing backrefs...done. (0.20580052 seconds)
+Num backrefs: 13500000
+Number of iterations: 1033
+DirtyPartitions size: 2.54 MB, Coalg size: 108.56 MB
+Coalg sizes {
+  data: 55.88 MB,
+  reader: 0.00 MB,
+  locs: 0.69 MB,
+  backrefs: 51.50 MB,
+  backrefs_locs: 0.50 MB
+}
+Number of states: 90000, Number of partitions: 90000
+Computation took 0.5549002 seconds
+Starting parsing benchmarks/wta/wta-powerset-r4-iter0.boa...
+Parsing done, size: 73.04 MB in 0.16000052 seconds
+N log N algorithm.
+Initializing backrefs...done. (0.24338973 seconds)
+Num backrefs: 18000000
+Number of iterations: 3
+DirtyPartitions size: 2.53 MB, Coalg size: 142.89 MB
+Coalg sizes {
+  data: 73.04 MB,
+  reader: 0.00 MB,
+  locs: 0.69 MB,
+  backrefs: 68.66 MB,
+  backrefs_locs: 0.50 MB
+}
+Number of states: 90000, Number of partitions: 90000
+Computation took 0.64276963 seconds
+Starting parsing benchmarks/wta/wta-powerset-r4-iter1.boa...
+Parsing done, size: 73.04 MB in 0.1596703 seconds
+N log N algorithm.
+Initializing backrefs...done. (0.25171056 seconds)
+Num backrefs: 18000000
+Number of iterations: 3
+DirtyPartitions size: 2.53 MB, Coalg size: 142.89 MB
+Coalg sizes {
+  data: 73.04 MB,
+  reader: 0.00 MB,
+  locs: 0.69 MB,
+  backrefs: 68.66 MB,
+  backrefs_locs: 0.50 MB
+}
+Number of states: 90000, Number of partitions: 90000
+Computation took 0.65224457 seconds
+Starting parsing benchmarks/wta/wta-powerset-r4-iter2.boa...
+Parsing done, size: 73.04 MB in 0.17199226 seconds
+N log N algorithm.
+Initializing backrefs...done. (0.25216174 seconds)
+Num backrefs: 18000000
+Number of iterations: 3
+DirtyPartitions size: 2.53 MB, Coalg size: 142.89 MB
+Coalg sizes {
+  data: 73.04 MB,
+  reader: 0.00 MB,
+  locs: 0.69 MB,
+  backrefs: 68.66 MB,
+  backrefs_locs: 0.50 MB
+}
+Number of states: 90000, Number of partitions: 90000
+Computation took 0.6602104 seconds
+Starting parsing benchmarks/wta/wta-powerset-r4-iter3.boa...
+Parsing done, size: 73.04 MB in 0.15150748 seconds
+N log N algorithm.
+Initializing backrefs...done. (0.2512486 seconds)
+Num backrefs: 18000000
+Number of iterations: 3
+DirtyPartitions size: 2.53 MB, Coalg size: 142.89 MB
+Coalg sizes {
+  data: 73.04 MB,
+  reader: 0.00 MB,
+  locs: 0.69 MB,
+  backrefs: 68.66 MB,
+  backrefs_locs: 0.50 MB
+}
+Number of states: 90000, Number of partitions: 90000
+Computation took 0.6497854 seconds
+Starting parsing benchmarks/wta/wta-powerset-r4-iter4.boa...
+Parsing done, size: 73.04 MB in 0.1489721 seconds
+N log N algorithm.
+Initializing backrefs...done. (0.2536067 seconds)
+Num backrefs: 18000000
+Number of iterations: 3
+DirtyPartitions size: 2.53 MB, Coalg size: 142.89 MB
+Coalg sizes {
+  data: 73.04 MB,
+  reader: 0.00 MB,
+  locs: 0.69 MB,
+  backrefs: 68.66 MB,
+  backrefs_locs: 0.50 MB
+}
+Number of states: 90000, Number of partitions: 90000
+Computation took 0.65992737 seconds
+Starting parsing benchmarks/wta/wta-powerset-r4-iter5.boa...
+Parsing done, size: 73.04 MB in 0.163551 seconds
+N log N algorithm.
+Initializing backrefs...done. (0.24381542 seconds)
+Num backrefs: 18000000
+Number of iterations: 3
+DirtyPartitions size: 2.53 MB, Coalg size: 142.89 MB
+Coalg sizes {
+  data: 73.04 MB,
+  reader: 0.00 MB,
+  locs: 0.69 MB,
+  backrefs: 68.66 MB,
+  backrefs_locs: 0.50 MB
+}
+Number of states: 90000, Number of partitions: 90000
+Computation took 0.64167666 seconds
+Starting parsing benchmarks/wta/wta-powerset-r4-iter6.boa...
+Parsing done, size: 73.04 MB in 0.16255198 seconds
+N log N algorithm.
+Initializing backrefs...done. (0.25470346 seconds)
+Num backrefs: 18000000
+Number of iterations: 3
+DirtyPartitions size: 2.53 MB, Coalg size: 142.89 MB
+Coalg sizes {
+  data: 73.04 MB,
+  reader: 0.00 MB,
+  locs: 0.69 MB,
+  backrefs: 68.66 MB,
+  backrefs_locs: 0.50 MB
+}
+Number of states: 90000, Number of partitions: 90000
+Computation took 0.6605605 seconds
+Starting parsing benchmarks/wta/wta-powerset-r4-iter7.boa...
+Parsing done, size: 73.04 MB in 0.2502343 seconds
+N log N algorithm.
+Initializing backrefs...done. (0.2544241 seconds)
+Num backrefs: 18000000
+Number of iterations: 3
+DirtyPartitions size: 2.53 MB, Coalg size: 142.89 MB
+Coalg sizes {
+  data: 73.04 MB,
+  reader: 0.00 MB,
+  locs: 0.69 MB,
+  backrefs: 68.66 MB,
+  backrefs_locs: 0.50 MB
+}
+Number of states: 90000, Number of partitions: 90000
+Computation took 0.6605061 seconds
+Starting parsing benchmarks/wta/wta-powerset-r4-iter8.boa...
+Parsing done, size: 73.04 MB in 0.16335544 seconds
+N log N algorithm.
+Initializing backrefs...done. (0.25650397 seconds)
+Num backrefs: 18000000
+Number of iterations: 3
+DirtyPartitions size: 2.53 MB, Coalg size: 142.89 MB
+Coalg sizes {
+  data: 73.04 MB,
+  reader: 0.00 MB,
+  locs: 0.69 MB,
+  backrefs: 68.66 MB,
+  backrefs_locs: 0.50 MB
+}
+Number of states: 90000, Number of partitions: 90000
+Computation took 0.6637813 seconds
+Starting parsing benchmarks/wta/wta-powerset-r4-iter9.boa...
+Parsing done, size: 73.04 MB in 0.15772556 seconds
+N log N algorithm.
+Initializing backrefs...done. (0.25026163 seconds)
+Num backrefs: 18000000
+Number of iterations: 3
+DirtyPartitions size: 2.53 MB, Coalg size: 142.89 MB
+Coalg sizes {
+  data: 73.04 MB,
+  reader: 0.00 MB,
+  locs: 0.69 MB,
+  backrefs: 68.66 MB,
+  backrefs_locs: 0.50 MB
+}
+Number of states: 90000, Number of partitions: 90000
+Computation took 0.6423231 seconds
+Starting parsing benchmarks/wta/wta-powerset-r5-iter0.boa...
+Parsing done, size: 90.21 MB in 0.28378278 seconds
+N log N algorithm.
+Initializing backrefs...done. (0.2972044 seconds)
+Num backrefs: 22500000
+Number of iterations: 3
+DirtyPartitions size: 2.53 MB, Coalg size: 177.23 MB
+Coalg sizes {
+  data: 90.21 MB,
+  reader: 0.00 MB,
+  locs: 0.69 MB,
+  backrefs: 85.83 MB,
+  backrefs_locs: 0.50 MB
+}
+Number of states: 90000, Number of partitions: 90000
+Computation took 0.7459953 seconds
+Starting parsing benchmarks/wta/wta-powerset-r5-iter1.boa...
+Parsing done, size: 90.21 MB in 0.17746846 seconds
+N log N algorithm.
+Initializing backrefs...done. (0.29297137 seconds)
+Num backrefs: 22500000
+Number of iterations: 3
+DirtyPartitions size: 2.53 MB, Coalg size: 177.23 MB
+Coalg sizes {
+  data: 90.21 MB,
+  reader: 0.00 MB,
+  locs: 0.69 MB,
+  backrefs: 85.83 MB,
+  backrefs_locs: 0.50 MB
+}
+Number of states: 90000, Number of partitions: 90000
+Computation took 0.7446628 seconds
+Starting parsing benchmarks/wta/wta-powerset-r5-iter2.boa...
+Parsing done, size: 90.21 MB in 0.28937644 seconds
+N log N algorithm.
+Initializing backrefs...done. (0.2821301 seconds)
+Num backrefs: 22500000
+Number of iterations: 3
+DirtyPartitions size: 2.53 MB, Coalg size: 177.23 MB
+Coalg sizes {
+  data: 90.21 MB,
+  reader: 0.00 MB,
+  locs: 0.69 MB,
+  backrefs: 85.83 MB,
+  backrefs_locs: 0.50 MB
+}
+Number of states: 90000, Number of partitions: 90000
+Computation took 0.72456807 seconds
+Starting parsing benchmarks/wta/wta-powerset-r5-iter3.boa...
+Parsing done, size: 90.21 MB in 0.20602852 seconds
+N log N algorithm.
+Initializing backrefs...done. (0.3056513 seconds)
+Num backrefs: 22500000
+Number of iterations: 3
+DirtyPartitions size: 2.53 MB, Coalg size: 177.23 MB
+Coalg sizes {
+  data: 90.21 MB,
+  reader: 0.00 MB,
+  locs: 0.69 MB,
+  backrefs: 85.83 MB,
+  backrefs_locs: 0.50 MB
+}
+Number of states: 90000, Number of partitions: 90000
+Computation took 0.7621415 seconds
+Starting parsing benchmarks/wta/wta-powerset-r5-iter4.boa...
+Parsing done, size: 90.21 MB in 0.26806208 seconds
+N log N algorithm.
+Initializing backrefs...done. (0.31314272 seconds)
+Num backrefs: 22500000
+Number of iterations: 3
+DirtyPartitions size: 2.53 MB, Coalg size: 177.23 MB
+Coalg sizes {
+  data: 90.21 MB,
+  reader: 0.00 MB,
+  locs: 0.69 MB,
+  backrefs: 85.83 MB,
+  backrefs_locs: 0.50 MB
+}
+Number of states: 90000, Number of partitions: 90000
+Computation took 0.7751973 seconds
+Starting parsing benchmarks/wta/wta-powerset-r5-iter5.boa...
+Parsing done, size: 90.21 MB in 0.28771904 seconds
+N log N algorithm.
+Initializing backrefs...done. (0.3058354 seconds)
+Num backrefs: 22500000
+Number of iterations: 3
+DirtyPartitions size: 2.53 MB, Coalg size: 177.23 MB
+Coalg sizes {
+  data: 90.21 MB,
+  reader: 0.00 MB,
+  locs: 0.69 MB,
+  backrefs: 85.83 MB,
+  backrefs_locs: 0.50 MB
+}
+Number of states: 90000, Number of partitions: 90000
+Computation took 0.7552287 seconds
+Starting parsing benchmarks/wta/wta-powerset-r5-iter6.boa...
+Parsing done, size: 90.21 MB in 0.29680428 seconds
+N log N algorithm.
+Initializing backrefs...done. (0.31106368 seconds)
+Num backrefs: 22500000
+Number of iterations: 3
+DirtyPartitions size: 2.53 MB, Coalg size: 177.23 MB
+Coalg sizes {
+  data: 90.21 MB,
+  reader: 0.00 MB,
+  locs: 0.69 MB,
+  backrefs: 85.83 MB,
+  backrefs_locs: 0.50 MB
+}
+Number of states: 90000, Number of partitions: 90000
+Computation took 0.75163853 seconds
+Starting parsing benchmarks/wta/wta-powerset-r5-iter7.boa...
+Parsing done, size: 90.21 MB in 0.22663788 seconds
+N log N algorithm.
+Initializing backrefs...done. (0.3195275 seconds)
+Num backrefs: 22500000
+Number of iterations: 3
+DirtyPartitions size: 2.53 MB, Coalg size: 177.23 MB
+Coalg sizes {
+  data: 90.21 MB,
+  reader: 0.00 MB,
+  locs: 0.69 MB,
+  backrefs: 85.83 MB,
+  backrefs_locs: 0.50 MB
+}
+Number of states: 90000, Number of partitions: 90000
+Computation took 0.77628005 seconds
+Starting parsing benchmarks/wta/wta-powerset-r5-iter8.boa...
+Parsing done, size: 90.21 MB in 0.2211188 seconds
+N log N algorithm.
+Initializing backrefs...done. (0.30778897 seconds)
+Num backrefs: 22500000
+Number of iterations: 3
+DirtyPartitions size: 2.53 MB, Coalg size: 177.23 MB
+Coalg sizes {
+  data: 90.21 MB,
+  reader: 0.00 MB,
+  locs: 0.69 MB,
+  backrefs: 85.83 MB,
+  backrefs_locs: 0.50 MB
+}
+Number of states: 90000, Number of partitions: 90000
+Computation took 0.7683427 seconds
+Starting parsing benchmarks/wta/wta-powerset-r5-iter9.boa...
+Parsing done, size: 90.21 MB in 0.21067646 seconds
+N log N algorithm.
+Initializing backrefs...done. (0.3011294 seconds)
+Num backrefs: 22500000
+Number of iterations: 3
+DirtyPartitions size: 2.53 MB, Coalg size: 177.23 MB
+Coalg sizes {
+  data: 90.21 MB,
+  reader: 0.00 MB,
+  locs: 0.69 MB,
+  backrefs: 85.83 MB,
+  backrefs_locs: 0.50 MB
+}
+Number of states: 90000, Number of partitions: 90000
+Computation took 0.75291973 seconds
+
+
+
+
+
+
+
+
+
+
+
+m = 4500000    t = 0.3886132 seconds
+m = 4500000    t = 0.35630575 seconds
+m = 4500000    t = 0.38324887 seconds
+m = 4500000    t = 0.37285995 seconds
+m = 4500000    t = 0.3531003 seconds
+m = 4500000    t = 0.38287762 seconds
+m = 4500000    t = 0.38532853 seconds
+m = 4500000    t = 0.35125497 seconds
+m = 4500000    t = 0.3519404 seconds
+m = 4500000    t = 0.36328238 seconds
+m = 9000000    t = 0.48760608 seconds
+m = 9000000    t = 0.47039 seconds
+m = 9000000    t = 0.4866189 seconds
+m = 9000000    t = 0.4885997 seconds
+m = 9000000    t = 0.49042508 seconds
+m = 9000000    t = 0.4990982 seconds
+m = 9000000    t = 0.49365756 seconds
+m = 9000000    t = 0.47671992 seconds
+m = 9000000    t = 0.47999084 seconds
+m = 9000000    t = 0.4866691 seconds
+m = 13500000    t = 0.5215748 seconds
+m = 13500000    t = 0.53962225 seconds
+m = 13500000    t = 0.54543626 seconds
+m = 13500000    t = 0.53548414 seconds
+m = 13500000    t = 0.5475415 seconds
+m = 13500000    t = 0.5271388 seconds
+m = 13500000    t = 0.54887414 seconds
+m = 13500000    t = 0.5397975 seconds
+m = 13500000    t = 0.5444419 seconds
+m = 13500000    t = 0.5549002 seconds
+m = 18000000    t = 0.64276963 seconds
+m = 18000000    t = 0.65224457 seconds
+m = 18000000    t = 0.6602104 seconds
+m = 18000000    t = 0.6497854 seconds
+m = 18000000    t = 0.65992737 seconds
+m = 18000000    t = 0.64167666 seconds
+m = 18000000    t = 0.6605605 seconds
+m = 18000000    t = 0.6605061 seconds
+m = 18000000    t = 0.6637813 seconds
+m = 18000000    t = 0.6423231 seconds
+m = 22500000    t = 0.7459953 seconds
+m = 22500000    t = 0.7446628 seconds
+m = 22500000    t = 0.72456807 seconds
+m = 22500000    t = 0.7621415 seconds
+m = 22500000    t = 0.7751973 seconds
+m = 22500000    t = 0.7552287 seconds
+m = 22500000    t = 0.75163853 seconds
+m = 22500000    t = 0.77628005 seconds
+m = 22500000    t = 0.7683427 seconds
+m = 22500000    t = 0.75291973 seconds

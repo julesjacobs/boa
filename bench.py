@@ -5,6 +5,7 @@ import subprocess
 import pprint
 import datetime
 import statistics
+import math
 
 # Try to find a working time command
 try:
@@ -173,11 +174,18 @@ def get_type(row):
     if k in f: return v
   raise Exception(f"Type not found in {f=}")
 
-def timefmt(values):
-  if None in values: return "\\tna"
-  mean = "{:.2f}".format(statistics.mean(values),2)
-  # stdev = "{:.2f}".format(max(statistics.stdev(values), 0.01))
-  return f"{mean}" # $\pm$ {stdev}"
+def mktimefmt(m):
+  def timefmt(values):
+    if None in values: return "\\tna"
+    mt = max(statistics.mean(values),0.0001)
+    # mean = "{:.2f}".format(m/mt/1e6,2)
+    if float(round(mt)) == mt:
+      mean = str(int(mt))
+    else:
+      mean = "{:.2f}".format(mt,2)
+    # stdev = "{:.2f}".format(max(statistics.stdev(values), 0.01))
+    return f"{mean}" # $\pm$ {stdev}"
+  return timefmt
 
 def memfmt(values):
   if None in values: return "\\tna"
@@ -185,6 +193,10 @@ def memfmt(values):
 
 def row_coalg(row):
   type = get_type(row)
+  if "wta" in type:
+    typefmt = type.replace("wta", f"wta$_{row['copar-dcpr-r'][0]}$")
+  else:
+    typefmt = type
   n = row['boa-n_states'][0]
   n_min = row['boa-n_states_min'][0]
   m = row['boa-m_edges'][0]
@@ -197,18 +209,24 @@ def row_coalg(row):
   # copar_mems = row['copar-dcpr-copar_mem_mb']
   dcpr_mems = row['copar-dcpr-dcpr_mem_mb']
 
+  timefmt = mktimefmt(m)
+
   return {
     'type': type,
+    'typefmt': typefmt,
     'n': n,
-    'n_min': n_min,
+    # 'n_min': n_min,
+    'perc_red': str(math.floor(100*(n - n_min)/n))+"\%",
     'm': m,
-    'copar_times': copar_times[0] if copar_times[0] else "\\tna",
-    'dcpr_times': dcpr_times[0],
+    'copar_times': timefmt(copar_times),
+    'dcpr_times': timefmt(dcpr_times),
     'boa_times': timefmt(boa_times),
     # 'copar_mems': '\\approx 16000',
+    # 'copar_mems': '$>$160000' if None in copar_times else '$\\approx$160000',
     'dcpr_mems': str(dcpr_mems[0]) + "\\tnodes",
     'boa_mems': memfmt(boa_mems),
-    'm_per_sec': round(m / max(statistics.mean(boa_times),0.0001) / 1e6, 2)
+    # 'n_per_sec': round(n / max(statistics.mean(boa_times),0.0001) / 1e6, 2),
+    'm_per_sec': round(m / statistics.mean(boa_times) / 1e6, 2),
   }
 
 def row_lts(row):
@@ -223,24 +241,29 @@ def row_lts(row):
   boa_mems = row['boa-mem_mb']
   mcrl_mems = row['mcrl-bisim-mem_mb']
 
+  timefmt = mktimefmt(m)
+
   return {
     'type': type,
+    'typefmt': type,
     'n': n,
-    'n_min': n_min,
+    'perc_red': str(math.floor(100*(n - n_min)/n))+"\%",
+    # 'n_min': n_min,
     'm': m,
     'mcrl_times': timefmt(mcrl_times),
     'boa_times': timefmt(boa_times),
     # 'copar_mems': '\\approx 16000',
     'mcrl_mems': memfmt(mcrl_mems),
     'boa_mems': memfmt(boa_mems),
-    'm_per_sec': round(m / max(statistics.mean(boa_times),0.0001) / 1e6, 2)
+    # 'n_per_sec': round(n / max(statistics.mean(boa_times),0.0001) / 1e6, 2),
+    'm_per_sec': round(m / max(statistics.mean(boa_times),0.0001) / 1e6, 2),
   }
 
 
 def printtable(data):
   data = sorted(data, key=lambda r: (r['type'], r['n']))
   row0 = data[0].keys()
-  sep = lambda vs: " & ".join([str(v).rjust(15) for v in vs])+" \\\\"
+  sep = lambda vs: " & ".join([str(v).rjust(15) for v in list(vs)[1:]])+" \\\\"
   out = [sep(row0)]
   lasttype = None
   for row in data:
