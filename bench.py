@@ -132,7 +132,7 @@ def merge(df1, df2):
 # Run the benchmarks or get them from benchresults/*.txt files #
 ################################################################
 
-reps = 2
+reps = 1
 os.system("cargo build -r")
 boa_coalg = runbench("benchmarks/coalg/*/*.boa", 'boa-coalg', runboa, reps)
 copar_dcpr_coalg = runbench("benchmarks/coalg/*/*.boa", 'copar-dcpr-coalg', exit, 1)
@@ -215,8 +215,8 @@ def row_coalg(row):
     'type': type,
     'typefmt': typefmt,
     'n': n,
-    # 'n_min': n_min,
     'perc_red': str(math.floor(100*(n - n_min)/n))+"\%",
+    'n_min': n_min,
     'm': m,
     'copar_times': timefmt(copar_times),
     'dcpr_times': timefmt(dcpr_times),
@@ -226,7 +226,8 @@ def row_coalg(row):
     'dcpr_mems': str(dcpr_mems[0]) + "\\tnodes",
     'boa_mems': memfmt(boa_mems),
     # 'n_per_sec': round(n / max(statistics.mean(boa_times),0.0001) / 1e6, 2),
-    'm_per_sec': round(m / statistics.mean(boa_times) / 1e6, 2),
+    # 'm_per_sec': round(m / statistics.mean(boa_times) / 1e6, 2),
+    'k': round(m/n,2),
   }
 
 def row_lts(row):
@@ -248,7 +249,7 @@ def row_lts(row):
     'typefmt': type,
     'n': n,
     'perc_red': str(math.floor(100*(n - n_min)/n))+"\%",
-    # 'n_min': n_min,
+    'n_min': n_min,
     'm': m,
     'mcrl_times': timefmt(mcrl_times),
     'boa_times': timefmt(boa_times),
@@ -256,7 +257,8 @@ def row_lts(row):
     'mcrl_mems': memfmt(mcrl_mems),
     'boa_mems': memfmt(boa_mems),
     # 'n_per_sec': round(n / max(statistics.mean(boa_times),0.0001) / 1e6, 2),
-    'm_per_sec': round(m / max(statistics.mean(boa_times),0.0001) / 1e6, 2),
+    # 'm_per_sec': round(m / max(statistics.mean(boa_times),0.0001) / 1e6, 2),
+    'k': round(m/n,2),
   }
 
 
