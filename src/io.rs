@@ -172,10 +172,84 @@ pub fn convert_file(filename: &str) {
     }
 }
 
-#[test]
-fn test_convert_file() {
-    std::fs::remove_file("tests/test1_converted.boa.txt").unwrap();
-    std::fs::remove_file("tests/test1.boa").unwrap();
-    convert_file("tests/test1_converted.boa");
-    convert_file("tests/test1.boa.txt");
+#[cfg(test)]
+mod tests {
+    use super::{convert_file, read_aut};
+    use crate::binrep::{Node, TAG_TYP};
+    use std::{
+        fs,
+        path::PathBuf,
+        sync::atomic::{AtomicU64, Ordering},
+    };
+
+    static NEXT_TEMP_DIR: AtomicU64 = AtomicU64::new(0);
+
+    struct TempDir(PathBuf);
+
+    impl TempDir {
+        fn new() -> Self {
+            let sequence = NEXT_TEMP_DIR.fetch_add(1, Ordering::Relaxed);
+            let path = std::env::temp_dir().join(format!(
+                "boa-tests-{}-{sequence}",
+                std::process::id()
+            ));
+            fs::create_dir(&path).unwrap();
+            Self(path)
+        }
+    }
+
+    impl Drop for TempDir {
+        fn drop(&mut self) {
+            fs::remove_dir_all(&self.0).unwrap();
+        }
+    }
+
+    #[test]
+    fn convert_file_round_trips_all_node_types() {
+        let temp_dir = TempDir::new();
+        let text_path = temp_dir.0.join("nodes.boa.txt");
+        let binary_path = temp_dir.0.join("nodes.boa");
+        let source = b"List[0]{@0,@1}\nSet[1]{@1,@1}\nAdd[2]{@2:3}\nOr[3]{@3:4}\nMax[4]{@4:5}\nTag[5]{@5:6}";
+        fs::write(&text_path, source).unwrap();
+
+        convert_file(text_path.to_str().unwrap());
+        assert!(binary_path.is_file());
+        fs::remove_file(&text_path).unwrap();
+        convert_file(binary_path.to_str().unwrap());
+
+        assert_eq!(fs::read(text_path).unwrap(), source);
+    }
+
+    #[test]
+    fn read_aut_preserves_transitions_and_labels() {
+        let temp_dir = TempDir::new();
+        let path = temp_dir.0.join("graph.aut");
+        fs::write(
+            &path,
+            b"des (0, 3, 3)\n(0,\"a\",1)\n(0,\"b\",2)\n(1,\"a\",1)\n",
+        )
+        .unwrap();
+
+        let (data, reader) = read_aut(&path);
+        let mut pointer = data.as_ptr();
+        unsafe {
+            assert_eq!(
+                Node::read(&reader, &mut pointer),
+                Node::Mon(
+                    TAG_TYP,
+                    0,
+                    vec![(Node::State(1), 0), (Node::State(2), 1)],
+                )
+            );
+            assert_eq!(
+                Node::read(&reader, &mut pointer),
+                Node::Mon(TAG_TYP, 0, vec![(Node::State(1), 0)])
+            );
+            assert_eq!(
+                Node::read(&reader, &mut pointer),
+                Node::Mon(TAG_TYP, 0, vec![])
+            );
+            assert!(crate::binrep::CReader::is_at_end(&data, pointer));
+        }
+    }
 }

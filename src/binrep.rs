@@ -118,19 +118,21 @@ pub struct CReader {
 
 impl CReader {
     pub unsafe fn read_node(self: &Self, data: *const u8) -> (u32, *const u8) {
-        let x = *(data as *const u32);
-        if is_compressed32(x) {
-            (self.headers[get_compressed32(x) as usize], data.add(1))
+        let first = *data;
+        if first & 1 == 0 {
+            (self.headers[(first >> 1) as usize], data.add(1))
         } else {
+            let x = u32::from_le(std::ptr::read_unaligned(data.cast::<u32>()));
             (get_noncompressed32(x), data.add(4))
         }
     }
 
     pub unsafe fn read_value(self: &Self, data: *const u8) -> (u64, *const u8) {
-        let x = *(data as *const u64);
-        if is_compressed64(x) {
-            (self.values[get_compressed64(x) as usize], data.add(1))
+        let first = *data;
+        if first & 1 == 0 {
+            (self.values[(first >> 1) as usize], data.add(1))
         } else {
+            let x = u64::from_le(std::ptr::read_unaligned(data.cast::<u64>()));
             (get_noncompressed64(x), data.add(8))
         }
     }
@@ -171,8 +173,7 @@ impl CWriter {
         }
     }
 
-    pub fn finish(mut self: Self) -> (Vec<u8>, CReader) {
-        self.data.reserve(7); // make sure to not trigger undefined behaviour by reading u64 at the last byte
+    pub fn finish(self: Self) -> (Vec<u8>, CReader) {
         return (
             self.data,
             CReader {
@@ -196,14 +197,14 @@ impl CWriter {
                 // println!("Headers map size: {}", self.headers_map.len());
                 // panic!("Node dict full");
                 self.data
-                    .extend(u32::to_ne_bytes(put_noncompressed32(node)))
+                    .extend(u32::to_le_bytes(put_noncompressed32(node)))
             }
         }
     }
 
     pub fn write_node_noncompressed(self: &mut Self, node: u32) {
         self.data
-            .extend(u32::to_ne_bytes(put_noncompressed32(node)))
+            .extend(u32::to_le_bytes(put_noncompressed32(node)))
     }
 
     pub fn write_value(self: &mut Self, value: u64) {
@@ -218,7 +219,7 @@ impl CWriter {
             } else {
                 // panic!("Value dict full");
                 self.data
-                    .extend(u64::to_ne_bytes(put_noncompressed64(value)))
+                    .extend(u64::to_le_bytes(put_noncompressed64(value)))
             }
         }
     }
@@ -250,6 +251,30 @@ fn test_creader_cwriter() {
                 assert_eq!(r.read_value_mut(&mut p), i)
             }
         }
+    }
+}
+
+#[test]
+fn test_creader_handles_unaligned_and_terminal_values() {
+    let mut reader = CReader {
+        headers: [0; 128],
+        values: [0; 128],
+    };
+    reader.headers[0] = put_state(17);
+    reader.values[0] = 23;
+
+    unsafe {
+        let terminal = [0_u8];
+        assert_eq!(reader.read_node(terminal.as_ptr()).0, put_state(17));
+        assert_eq!(reader.read_value(terminal.as_ptr()).0, 23);
+
+        let mut node = vec![0];
+        node.extend(put_noncompressed32(put_state(123)).to_le_bytes());
+        assert_eq!(reader.read_node(node.as_ptr().add(1)).0, put_state(123));
+
+        let mut value = vec![0];
+        value.extend(put_noncompressed64(456).to_le_bytes());
+        assert_eq!(reader.read_value(value.as_ptr().add(1)).0, 456);
     }
 }
 

@@ -138,4 +138,7 @@ fn test_read_node() {
 
   assert_eq!(read_node("Max[123]{}abc".as_bytes()),
       (Node::Mon(MAX_TYP, 123, vec![]),"abc".as_bytes()));
+
+  assert_eq!(read_node("Tag[123]{@12:5,@13:6}abc".as_bytes()),
+      (Node::Mon(TAG_TYP, 123, vec![(Node::State(12),5),(Node::State(13),6)]),"abc".as_bytes()));
 }

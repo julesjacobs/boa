@@ -59,6 +59,11 @@ where A:Ord+Copy {
 }
 
 #[test]
+fn test_renumber_preserves_full_width_ids() {
+    assert_eq!(renumber(&[7_u64, 7 + (1_u64 << 32), 7]), [0, 1, 0]);
+}
+
+#[test]
 fn test_renumber_sort() {
     assert_eq!(renumber_sort(&vec![3,1,3,1,5,3,0,1]), vec![0,1,0,1,3,0,2
     ,1]);

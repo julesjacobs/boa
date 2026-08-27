@@ -2,7 +2,7 @@
 use crate::{hmap::HMap, coalg::{init_partition_ids_unsafe, repartition_all_unsafe64}, binrep::CReader};
 
 #[cfg(test)]
-use crate::{io::read_boa_txt, renumber};
+use crate::io::read_boa_txt;
 
 fn count_parts(sigs: &[u64]) -> usize {
   let mut sigs2 = sigs.to_vec();
@@ -43,7 +43,7 @@ pub fn partref_naive(data: &[u8], r: &CReader) -> Vec<u32> {
       println!("Iteration: {}, number of partitions/total states: {}/{}", iter, new_part_count, ids.len());
       if new_part_count == new_ids.len() || new_part_count == part_count {
           println!("Number of iterations: {}", iter+1);
-          return new_ids.iter().map(|id| *id as u32).collect();
+          return crate::renumber(&new_ids);
       } else {
           ids = new_ids;
           part_count = new_part_count;
@@ -55,6 +55,6 @@ pub fn partref_naive(data: &[u8], r: &CReader) -> Vec<u32> {
 #[test]
 fn test_partref_naive() {
   let (data,r) = read_boa_txt("tests/test1.boa.txt");
-  let ids = renumber(&partref_naive(&data,&r));
+  let ids = partref_naive(&data,&r);
   assert_eq!(&ids, &vec![0,0,1,1,2,3,3,4]);
 }

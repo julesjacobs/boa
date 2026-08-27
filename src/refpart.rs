@@ -209,3 +209,63 @@ impl RefinablePartition {
       return new_partitions;
   }
 }
+
+#[cfg(test)]
+mod partition_tests {
+  use super::RefinablePartition;
+  use std::collections::HashSet;
+
+  fn assert_invariants(partition: &RefinablePartition) {
+      let num_states = partition.buffer.len();
+      assert_eq!(partition.position.len(), num_states);
+      assert_eq!(partition.state2block.len(), num_states);
+
+      let states = partition.buffer.iter().copied().collect::<HashSet<_>>();
+      assert_eq!(states, (0..num_states as u32).collect());
+      for (position, &state) in partition.buffer.iter().enumerate() {
+          assert_eq!(partition.position[state as usize], position as u32);
+      }
+
+      let mut covered = vec![false; num_states];
+      for (block_id, &(start, mid, end)) in partition.partition.iter().enumerate() {
+          assert!(start <= mid && mid <= end && end as usize <= num_states);
+          for position in start..end {
+              assert!(!covered[position as usize]);
+              covered[position as usize] = true;
+              let state = partition.buffer[position as usize];
+              assert_eq!(partition.state2block[state as usize], block_id as u32);
+          }
+      }
+      assert!(covered.into_iter().all(|is_covered| is_covered));
+
+      let worklist = partition.worklist.iter().copied().collect::<HashSet<_>>();
+      assert_eq!(worklist.len(), partition.worklist.len());
+      assert!(worklist.iter().all(|&block| block < partition.partition.len() as u32));
+  }
+
+  #[test]
+  fn refine_and_mark_dirty_preserve_partition_invariants() {
+      let mut partition = RefinablePartition::new(6);
+      assert_invariants(&partition);
+
+      assert_eq!(partition.worklist.pop_front(), Some(0));
+      let new_blocks = partition.refine(0, &[0, 1, 0, 2, 1, 2]);
+      assert_eq!(new_blocks, [1, 2]);
+      assert_invariants(&partition);
+
+      partition.mark_dirty(0);
+      partition.mark_dirty(0);
+      assert_eq!(partition.worklist.iter().copied().collect::<Vec<_>>(), [1]);
+      assert_eq!(partition.refiners(1).len(), 2);
+      assert_invariants(&partition);
+
+      assert_eq!(partition.worklist.pop_front(), Some(1));
+      let new_blocks = partition.refine(1, &[0, 1]);
+      assert_eq!(new_blocks, [3]);
+      assert_invariants(&partition);
+
+      partition.mark_dirty(0);
+      assert!(partition.worklist.is_empty());
+      assert_invariants(&partition);
+  }
+}

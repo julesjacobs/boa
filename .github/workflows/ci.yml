@@ -1,42 +1,40 @@
-on: [push]
-
 name: CI
 
+on: [push, pull_request]
+
+permissions:
+  contents: read
+
 concurrency:
-  # Using concurrency to cancel any in-progress job or run.
-  # https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#example-using-concurrency-to-cancel-any-in-progress-job-or-run
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  CARGO_TERM_COLOR: always
 
 jobs:
-  build_and_test:
-    name: Build and test BOA
+  test:
+    name: Tests (${{ matrix.name }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - name: debug
+            args: ""
+          - name: release
+            args: --release
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo test --all-features ${{ matrix.args }}
+
+  coverage:
+    name: Coverage
     runs-on: ubuntu-latest
     steps:
-      - name: Fetch repository
-        uses: actions/checkout@v2
-      - name: Set up rust
-        uses: actions-rs/toolchain@v1
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
         with:
-          toolchain: stable
-      - uses: actions/cache@v1
-        name: Cache ~/.cargo
-        with:
-          path: ~/.cargo
-          key: home-cargo-cache
-      - uses: actions/cache@v1
-        name: Cache target/
-        with:
-          path: target
-          key: cargo-target-cache
-      - name: Build
-        uses: actions-rs/cargo@v1
-        with:
-          command: build
-          args: --release --all-features
-      - name: Test
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --release --all-features
+          components: llvm-tools-preview
+      - uses: taiki-e/install-action@cargo-llvm-cov
+      - run: cargo llvm-cov --all-features --workspace --summary-only --fail-under-lines 90

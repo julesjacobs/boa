@@ -3,7 +3,11 @@ use std::time::SystemTime;
 use datasize::data_size;
 
 #[cfg(test)]
-use crate::{naivealg::partref_naive, io::read_boa_txt};
+use crate::{
+  binrep::{CWriter, Node, LIST_TYP},
+  io::read_boa_txt,
+  naivealg::partref_naive,
+};
 
 use crate::{binrep::CReader, refpart::RefinablePartition, coalg::repartition_unsafe, coalg::Coalg, renumber, util, };
 
@@ -94,4 +98,86 @@ fn test_partref_wlan() {
   let (data, r) = read_boa_txt(&filename);
   let ids = partref_nlogn(data, r);
   assert_eq!(*ids.iter().max().unwrap(), 243324);
+}
+
+#[cfg(test)]
+fn assert_dense_partition(ids: &[u32]) {
+  let mut unique = ids.to_vec();
+  unique.sort_unstable();
+  unique.dedup();
+  assert_eq!(unique, (0..unique.len() as u32).collect::<Vec<_>>());
+}
+
+#[cfg(test)]
+fn assert_same_partition(left: &[u32], right: &[u32]) {
+  assert_eq!(left.len(), right.len());
+  for i in 0..left.len() {
+      for j in 0..left.len() {
+          assert_eq!(left[i] == left[j], right[i] == right[j], "states {i} and {j}");
+      }
+  }
+}
+
+#[cfg(test)]
+fn compare_algorithms(data: Vec<u8>, reader: CReader) {
+  let naive = partref_naive(&data, &reader);
+  let optimized = partref_nlogn(data, reader);
+  assert_dense_partition(&naive);
+  assert_dense_partition(&optimized);
+  assert_same_partition(&naive, &optimized);
+}
+
+#[test]
+fn paper_fixtures_match_naive_refinement() {
+  let mut filenames = glob::glob("tests/paper_test*.boa.txt")
+      .unwrap()
+      .map(Result::unwrap)
+      .collect::<Vec<_>>();
+  filenames.extend(["tests/test1.boa.txt".into(), "tests/test2.boa.txt".into()]);
+  filenames.sort();
+
+  for filename in filenames {
+      let (data, reader) = read_boa_txt(&filename);
+      compare_algorithms(data, reader);
+  }
+}
+
+#[cfg(test)]
+struct TestRng(u64);
+
+#[cfg(test)]
+impl TestRng {
+  fn next(&mut self) -> u64 {
+      let mut value = self.0;
+      value ^= value << 13;
+      value ^= value >> 7;
+      value ^= value << 17;
+      self.0 = value;
+      value
+  }
+
+  fn usize(&mut self, upper: usize) -> usize {
+      self.next() as usize % upper
+  }
+}
+
+#[test]
+fn generated_graphs_match_naive_refinement() {
+  let mut rng = TestRng(0x5eed_1234_abcd_9876);
+  for _ in 0..100 {
+      let num_states = 1 + rng.usize(40);
+      let mut writer = CWriter::new();
+      for _ in 0..num_states {
+          let node = Node::Coll(
+              LIST_TYP,
+              rng.usize(8) as u8,
+              (0..rng.usize(6))
+                  .map(|_| Node::State(rng.usize(num_states) as u32))
+                  .collect(),
+          );
+          node.write(&mut writer);
+      }
+      let (data, reader) = writer.finish();
+      compare_algorithms(data, reader);
+  }
 }
