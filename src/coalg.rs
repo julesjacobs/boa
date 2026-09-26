@@ -8,6 +8,7 @@ use std::hash::Hash;
 use datasize::DataSize;
 use itertools::Itertools;
 use crate::hmap::new_hasher;
+use crate::util;
 
 use crate::{binrep::{self, CReader, get_state, is_state, decode_header, get_header, LIST_TYP, ADD_TYP, SET_TYP, MAX_TYP, OR_TYP, TAG_TYP}};
 
@@ -273,7 +274,22 @@ unsafe fn canonicalize<I:Ids+?Sized>(p : *const u8, r: &CReader, ids: &I, scratc
 pub fn repartition_into(coa : &Coalg, states: &[u32], ids: &[ID], sigs: &mut Vec<u64>, scratch: &mut Vec<(u64,u64)>) {
     sigs.clear();
     sigs.reserve(states.len());
-    for &state in states {
+    // The states are scattered in memory, so prefetch the data of states a few iterations ahead,
+    // and the location of that data a few iterations before that.
+    const AHEAD: usize = 4;
+    for &state in states.iter().take(2 * AHEAD) {
+        util::prefetch(&coa.locs[state as usize]);
+    }
+    for &state in states.iter().take(AHEAD) {
+        util::prefetch(coa.locs[state as usize]);
+    }
+    for (i, &state) in states.iter().enumerate() {
+        if let Some(&next) = states.get(i + 2 * AHEAD) {
+            util::prefetch(&coa.locs[next as usize]);
+        }
+        if let Some(&next) = states.get(i + AHEAD) {
+            util::prefetch(coa.locs[next as usize]);
+        }
         let p = coa.locs[state as usize];
         unsafe {
             let (sig,_rest) = canonicalize(p, &coa.reader, ids, scratch);
