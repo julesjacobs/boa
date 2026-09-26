@@ -7,9 +7,10 @@ use crate::{
   binrep::{CWriter, Node, LIST_TYP},
   io::read_boa_txt,
   naivealg::partref_naive,
+  renumber,
 };
 
-use crate::{binrep::CReader, refpart::RefinablePartition, coalg::repartition_into, coalg::Coalg, hmap::HMap, renumber, util, };
+use crate::{binrep::CReader, refpart::RefinablePartition, coalg::repartition_into, coalg::Coalg, hmap::HMap, util, };
 
 fn partref_nlogn_raw(data: Vec<u8>, r: CReader) -> Vec<u32> {
   // println!("===================== Starting partref_nlogn");
@@ -126,9 +127,31 @@ fn test_renumberer_matches_renumber() {
   }
 }
 
+/// Same result as renumber, for ids that are all smaller than ids.len() (such as block ids).
+fn renumber_dense(ids: &[u32]) -> Vec<u32> {
+  let mut map = vec![u32::MAX; ids.len()];
+  let mut next = 0;
+  ids.iter().map(|&id| {
+      let new_id = &mut map[id as usize];
+      if *new_id == u32::MAX {
+          *new_id = next;
+          next += 1;
+      }
+      *new_id
+  }).collect()
+}
+
+#[test]
+fn test_renumber_dense() {
+  let ids = [3, 3, 0, 5, 0, 1, 3];
+  assert_eq!(renumber_dense(&ids), renumber(&ids));
+  assert_eq!(renumber_dense(&[]), Vec::<u32>::new());
+}
+
 pub fn partref_nlogn(data: Vec<u8>, r: CReader) -> Vec<u32> {
   let ids = partref_nlogn_raw(data, r);
-  return renumber(&ids);
+  // block ids are smaller than the number of blocks, which is at most the number of states
+  return renumber_dense(&ids);
 }
 
 #[test]
