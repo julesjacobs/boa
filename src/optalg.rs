@@ -9,7 +9,7 @@ use crate::{
   naivealg::partref_naive,
 };
 
-use crate::{binrep::CReader, refpart::RefinablePartition, coalg::repartition_unsafe, coalg::Coalg, renumber, util, };
+use crate::{binrep::CReader, refpart::RefinablePartition, coalg::repartition_into, coalg::Coalg, hmap::HMap, renumber, util, };
 
 fn partref_nlogn_raw(data: Vec<u8>, r: CReader) -> Vec<u32> {
   // println!("===================== Starting partref_nlogn");
@@ -25,30 +25,35 @@ fn partref_nlogn_raw(data: Vec<u8>, r: CReader) -> Vec<u32> {
   let mut iters = 0;
   let mut partition = RefinablePartition::new(coa.num_states());
 
+  // Buffers reused across iterations, so that the main loop does not allocate.
+  let mut raw_sigs: Vec<u64> = vec![];
+  let mut scratch: Vec<(u64,u64)> = vec![];
+  let mut renumberer = Renumberer::default();
+  let mut signatures: Vec<u32> = vec![];
+  let mut moved_states: Vec<u32> = vec![];
+
   let start_time_iters = SystemTime::now();
-  while let Some(block_id) = if false { partition.worklist.pop_front() } else { partition.worklist.pop_back() } {
-
-      // let (start,mid,end) = partition.partition[block_id as usize];
-      // println!("iteration={} #partitions={} #worklist={} clean={} dirty={}", iters, partition.partition.len(), partition.worklist.len(), mid-start, end-mid);
-
+  while let Some(block_id) = partition.worklist.pop_back() {
       let states = partition.refiners(block_id);
-      // println!("states = {:?}", states);
-      let signatures = renumber::<u64>(&repartition_unsafe(&coa, states, &partition.state2block));
-      // println!("partition id = {:?}, partition = {:?}, states = {:?}, sigs = {:?}", block_id, partition.partition[block_id as usize], states, &signatures);
+      repartition_into(&coa, states, &partition.state2block, &mut raw_sigs, &mut scratch);
+      renumberer.renumber(&raw_sigs, &mut signatures);
+      release_if_large(&mut raw_sigs);
       let new_blocks = partition.refine(block_id, &signatures);
-      // println!("shrunk partition = {:?}, new partitions = {:?}, buffer = {:?}", partition.partition[block_id as usize], &new_partitions.iter().map(|pid| partition.partition[*pid as usize]).collect::<Vec<(u32,u32,u32)>>(), &partition.buffer);
+      release_if_large(&mut signatures);
+
+      // mark dirty all predecessors of states that moved to a new block
+      // (copied first, because mark_dirty reorders the states within blocks)
+      moved_states.clear();
       for predecessor_block in new_blocks {
-          // mark dirty all predecessors of states in this partition
-          // let part_debug = partition.partition[predecessor_block as usize];
           let (start,_, end) = partition.partition[predecessor_block as usize];
-          let states = partition.buffer[start as usize..end as usize].to_vec();
-          for state in states {
-              for &state2 in coa.state_backrefs(state) {
-                  // println!("state {} marks state {} as dirty (new partition: {:?} id: {})", state, state2, &part_debug, predecessor_block);
-                  partition.mark_dirty(state2);
-              }
+          moved_states.extend_from_slice(&partition.buffer[start as usize..end as usize]);
+      }
+      for &state in &moved_states {
+          for &state2 in coa.state_backrefs(state) {
+              partition.mark_dirty(state2);
           }
       }
+      release_if_large(&mut moved_states);
       iters += 1;
   }
   println!("iters: {} ", iters);
@@ -60,6 +65,65 @@ fn partref_nlogn_raw(data: Vec<u8>, r: CReader) -> Vec<u32> {
   let selfreport_time = start_time.elapsed().unwrap();
   println!("selfreport_time_s: {}", selfreport_time.as_secs_f32());
   return partition.state2block;
+}
+
+/// Buffers above this many elements are freed after use rather than kept around,
+/// so that the few very large iterations don't increase the peak memory use.
+pub const LARGE_BUFFER: usize = 1 << 16;
+
+pub fn release_if_large<T>(v: &mut Vec<T>) {
+  if v.capacity() > LARGE_BUFFER { *v = Vec::new(); }
+}
+
+/// Renumbers signatures to 0..k in order of first occurrence, reusing its memory across calls.
+#[derive(Default)]
+struct Renumberer {
+  map: HMap<u64,u32>,
+}
+
+impl Renumberer {
+  const SMALL: usize = 16;
+
+  fn renumber(&mut self, sigs: &[u64], out: &mut Vec<u32>) {
+      out.clear();
+      out.reserve(sigs.len());
+      if sigs.len() <= Self::SMALL {
+          // Linear search is faster than hashing for small blocks.
+          let mut seen = [0u64; Self::SMALL];
+          let mut num_seen = 0;
+          for &sig in sigs {
+              let id = match seen[..num_seen].iter().position(|&s| s == sig) {
+                  Some(id) => id,
+                  None => { seen[num_seen] = sig; num_seen += 1; num_seen - 1 }
+              };
+              out.push(id as u32);
+          }
+          return;
+      }
+      // Clearing a map costs time proportional to its capacity, so drop it if it's much too big.
+      if self.map.capacity() > 4 * sigs.len() {
+          self.map = HMap::default();
+      } else {
+          self.map.clear();
+      }
+      self.map.reserve(sigs.len());
+      for &sig in sigs {
+          let next = self.map.len() as u32;
+          out.push(*self.map.entry(sig).or_insert(next));
+      }
+      if self.map.capacity() > LARGE_BUFFER { self.map = HMap::default(); }
+  }
+}
+
+#[test]
+fn test_renumberer_matches_renumber() {
+  let mut renumberer = Renumberer::default();
+  let mut out = vec![];
+  for len in [0, 1, 5, 16, 17, 100, 3] {
+      let sigs: Vec<u64> = (0..len).map(|i| (i * 7 % 5) as u64 * 1_000_000_007).collect();
+      renumberer.renumber(&sigs, &mut out);
+      assert_eq!(out, renumber(&sigs));
+  }
 }
 
 pub fn partref_nlogn(data: Vec<u8>, r: CReader) -> Vec<u32> {

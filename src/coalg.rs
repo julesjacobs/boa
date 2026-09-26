@@ -30,29 +30,36 @@ pub struct Coalg {
 
 impl Coalg {
     pub fn new(data: Vec<u8>, r: CReader) -> Coalg {
-        // Iterate over one state starting at data[loc], calling f(i) on each state ref @i in the state.
+        // Iterate over one node starting at p, calling f(i) on each state ref @i in the node.
+        // State refs are handled inline; only nested nodes need a recursive call.
+        #[inline(always)]
         unsafe fn iter<F>(p: &mut *const u8, r: &CReader, f : &mut F)
         where F : FnMut(u32) -> () {
-            let w = r.read_node_mut( p);
+            let w = r.read_node_mut(p);
             if is_state(w) {
                 f(get_state(w));
             } else {
-                let (typ,_tag,len) = decode_header(get_header(w));
-                match typ {
-                    LIST_TYP|SET_TYP => {
-                        for _ in 0..len {
-                            iter(p,r,f)
-                        }
-                    },
-                    ADD_TYP|MAX_TYP|OR_TYP|TAG_TYP => {
-                        for _ in 0..len {
-                            iter(p,r,f);
-                            r.read_value_mut( p);
-                        }
-                    },
-                    _ => {
-                        panic!("Unknown typ.")
+                iter_node(p, r, f, get_header(w));
+            }
+        }
+
+        unsafe fn iter_node<F>(p: &mut *const u8, r: &CReader, f : &mut F, header: u32)
+        where F : FnMut(u32) -> () {
+            let (typ,_tag,len) = decode_header(header);
+            match typ {
+                LIST_TYP|SET_TYP => {
+                    for _ in 0..len {
+                        iter(p,r,f)
                     }
+                },
+                ADD_TYP|MAX_TYP|OR_TYP|TAG_TYP => {
+                    for _ in 0..len {
+                        iter(p,r,f);
+                        r.read_value_mut(p);
+                    }
+                },
+                _ => {
+                    panic!("Unknown typ.")
                 }
             }
         }
@@ -148,9 +155,32 @@ fn test_new_coalg() {
 
 type ID = u32; // represents canonical ID of a state or sub-node of a state, refers to a partition number
 
-fn hash_with_op<A,F,H>(repr: &mut [(A,u64)], hasher: &mut H, op: F)
-where F : Fn(u64,u64) -> u64, A:Ord+Copy+Hash, H:Hasher {
-    repr.sort_by_key(|kv| kv.0);
+/// Source of the signature of a state reference @i inside a node.
+pub trait Ids {
+    fn id(&self, state: u32) -> u64;
+}
+
+impl Ids for [u32] {
+    #[inline(always)]
+    fn id(&self, state: u32) -> u64 { self[state as usize] as u64 }
+}
+
+impl Ids for [u64] {
+    #[inline(always)]
+    fn id(&self, state: u32) -> u64 { self[state as usize] }
+}
+
+/// Every state has the same signature; used to compute the initial partition.
+pub struct InitIds;
+
+impl Ids for InitIds {
+    #[inline(always)]
+    fn id(&self, _state: u32) -> u64 { 0 }
+}
+
+/// Hash a sorted slice of (key,value) pairs, combining the values of equal keys with op.
+fn hash_with_op<A,F,H>(repr: &[(A,u64)], hasher: &mut H, op: F)
+where F : Fn(u64,u64) -> u64, A:Eq+Copy+Hash, H:Hasher {
     let mut i = 0;
     while i < repr.len() {
         let (x,v) = repr[i];
@@ -167,258 +197,115 @@ where F : Fn(u64,u64) -> u64, A:Ord+Copy+Hash, H:Hasher {
     }
 }
 
-unsafe fn canonicalize_node_unsafe<'a>(mut p : *const u8, r: &CReader, ids: &[ID], w: u32) -> (u64, *const u8) {
+/// Hash each distinct element of a sorted slice.
+fn hash_dedup<A:Eq+Copy+Hash, H:Hasher>(repr: &[A], hasher: &mut H) {
+    let mut prev: Option<A> = None;
+    for &x in repr {
+        if prev != Some(x) {
+            x.hash(hasher);
+            prev = Some(x);
+        }
+    }
+}
+
+/// Computes the signature of the node header w whose children start at p.
+/// Children of sets and monoids are collected on top of the scratch stack,
+/// so no allocation is needed once the scratch buffer has grown large enough.
+unsafe fn canonicalize_node<I:Ids+?Sized>(mut p : *const u8, r: &CReader, ids: &I, w: u32, scratch: &mut Vec<(u64,u64)>) -> (u64, *const u8) {
     let (typ,tag,len) = decode_header(w);
     let mut hasher = new_hasher();
     (typ,tag).hash(&mut hasher);
+    if typ == LIST_TYP {
+        for _ in 0..len {
+            let (sig, rest) = canonicalize(p, r, ids, scratch);
+            sig.hash(&mut hasher);
+            p = rest;
+        }
+        return (hasher.finish(), p);
+    }
+    let base = scratch.len();
     match typ {
-        LIST_TYP => {
+        SET_TYP => {
             for _ in 0..len {
-                let (sig, rest) = canonicalize_unsafe(p, r, ids);
-                sig.hash(&mut hasher);
+                let (sig, rest) = canonicalize(p, r, ids, scratch);
+                scratch.push((sig,0));
                 p = rest;
             }
-        },
-        SET_TYP => {
-            let mut repr: Vec<u64> = (0..len).map(|_| {
-                let (sig, rest) = canonicalize_unsafe(p, r, ids);
-                p = rest; sig
-            }).collect();
+            let repr = &mut scratch[base..];
             repr.sort_unstable();
-            for &sig in repr.iter().dedup() { sig.hash(&mut hasher); }
+            for &(sig,_) in repr.iter().dedup() { sig.hash(&mut hasher); }
         },
-        ADD_TYP|MAX_TYP|OR_TYP => {
-            let mut repr: Vec<(u64,u64)> = (0..len).map(|_| {
-                let (sig, p2) = canonicalize_unsafe(p, r, ids);
+        ADD_TYP|MAX_TYP|OR_TYP|TAG_TYP => {
+            for _ in 0..len {
+                let (sig, p2) = canonicalize(p, r, ids, scratch);
                 let (w,p3) = r.read_value(p2);
                 p = p3;
-                (sig,w)
-            }).collect();
-            match typ {
-                ADD_TYP => hash_with_op(&mut repr, &mut hasher, |a,b| a+b),
-                OR_TYP => hash_with_op(&mut repr, &mut hasher, |a,b| a|b),
-                MAX_TYP => hash_with_op(&mut repr, &mut hasher, |a,b| max(a,b)),
-                _ => panic!("Unreachable")
+                scratch.push((sig,w));
             }
-        },
-        TAG_TYP => {
-            let mut repr : Vec<u64> = (0..len).map(|_| {
-                let (sig, p2) = canonicalize_unsafe(p, r, ids);
-                let (w,p3) = r.read_value(p2);
-                p = p3;
-                // (sig,w)
-                let mut h = new_hasher();
-                sig.hash(&mut h);
-                w.hash(&mut h);
-                h.finish()
-            }).collect();
+            let repr = &mut scratch[base..];
+            // Sorting whole pairs keeps equal keys adjacent; the ops below are commutative.
             repr.sort_unstable();
-            for &sig in repr.iter().dedup() { sig.hash(&mut hasher); }
+            match typ {
+                ADD_TYP => hash_with_op(repr, &mut hasher, |a,b| a.wrapping_add(b)),
+                OR_TYP => hash_with_op(repr, &mut hasher, |a,b| a|b),
+                MAX_TYP => hash_with_op(repr, &mut hasher, |a,b| max(a,b)),
+                _ => hash_dedup(repr, &mut hasher),
+            }
         },
         _ => panic!("Unknown typ.")
     }
+    scratch.truncate(base);
     return (hasher.finish(), p);
 }
 
-unsafe fn canonicalize_unsafe<'a>(p : *const u8, r: &CReader, ids: &[ID]) -> (u64, *const u8) {
+/// Computes the signature of the node starting at p, and returns a pointer just past it.
+#[inline(always)]
+unsafe fn canonicalize<I:Ids+?Sized>(p : *const u8, r: &CReader, ids: &I, scratch: &mut Vec<(u64,u64)>) -> (u64, *const u8) {
     let (w,p) = r.read_node(p);
     if is_state(w) {
-        return (ids[get_state(w) as usize] as u64, p);
+        return (ids.id(get_state(w)), p);
     } else {
-        return canonicalize_node_unsafe(p, r, ids, get_header(w));
+        return canonicalize_node(p, r, ids, get_header(w), scratch);
+    }
+}
+
+/// Computes the signatures of the given states into sigs (which is cleared first).
+pub fn repartition_into(coa : &Coalg, states: &[u32], ids: &[ID], sigs: &mut Vec<u64>, scratch: &mut Vec<(u64,u64)>) {
+    sigs.clear();
+    sigs.reserve(states.len());
+    for &state in states {
+        let p = coa.locs[state as usize];
+        unsafe {
+            let (sig,_rest) = canonicalize(p, &coa.reader, ids, scratch);
+            sigs.push(sig);
+        }
     }
 }
 
 pub fn repartition_unsafe(coa : &Coalg, states: &[u32], ids: &[ID]) -> Vec<u64> {
     let mut sigs = vec![];
-    sigs.reserve(states.len());
-    for &state in states {
-        let p = coa.locs[state as usize];
-        unsafe {
-            let (sig,_rest) = canonicalize_unsafe(p, &coa.reader, ids);
-            sigs.push(sig);
-        }
-    }
+    repartition_into(coa, states, ids, &mut sigs, &mut vec![]);
     return sigs
 }
 
-unsafe fn canonicalize_node_unsafe64<'a>(mut p : *const u8, r: &CReader, ids: &[u64], w: u32) -> (u64, *const u8) {
-    let (typ,tag,len) = decode_header(w);
-    let mut hasher = new_hasher();
-    (typ,tag).hash(&mut hasher);
-    match typ {
-        LIST_TYP => {
-            for _ in 0..len {
-                let (sig, rest) = canonicalize_unsafe64(p, r, ids);
-                sig.hash(&mut hasher);
-                p = rest;
-            }
-        },
-        SET_TYP => {
-            let mut repr: Vec<u64> = (0..len).map(|_| {
-                let (sig, rest) = canonicalize_unsafe64(p, r, ids);
-                p = rest; sig
-            }).collect();
-            repr.sort_unstable();
-            for &sig in repr.iter().dedup() { sig.hash(&mut hasher); }
-        },
-        ADD_TYP|MAX_TYP|OR_TYP => {
-            let mut repr: Vec<(u64,u64)> = (0..len).map(|_| {
-                let (sig, p2) = canonicalize_unsafe64(p, r, ids);
-                let (w,p3) = r.read_value(p2);
-                p = p3;
-                (sig,w)
-            }).collect();
-            match typ {
-                ADD_TYP => hash_with_op(&mut repr, &mut hasher, |a,b| a+b),
-                OR_TYP => hash_with_op(&mut repr, &mut hasher, |a,b| a|b),
-                MAX_TYP => hash_with_op(&mut repr, &mut hasher, |a,b| max(a,b)),
-                _ => panic!("Unreachable")
-            }
-        },
-        TAG_TYP => {
-            let mut repr: Vec<(u64,u64)> = (0..len).map(|_| {
-                let (sig, p2) = canonicalize_unsafe64(p, r, ids);
-
-                // let x = *(p as *const u32);
-                // let w = get_noncompressed32(x);
-                // let p2 = p.add(4);
-                // // let (w,p2) = r.read_node(p);
-                // let sig = ids[get_state(w) as usize] as u64;
-
-                // unsafe fn read_node(self: &Self, data: *const u8) -> (u32, *const u8) {
-                //     let x = *(data as *const u32);
-                //     if is_compressed32(x) { (self.headers[get_compressed32(x) as usize], data.add(1)) }
-                //     else { (get_noncompressed32(x), data.add(4)) }
-                // }
-                // unsafe fn canonicalize_unsafe64<'a>(p : *const u8, r: &CReader, ids: &[u64]) -> (u64, *const u8) {
-                //     let (w,p) = r.read_node(p);
-                //     if is_state(w) {
-                //         return (ids[get_state(w) as usize] as u64, p);
-                //     } else {
-                //         return canonicalize_node_unsafe64(p, r, ids, get_header(w));
-                //     }
-                // }
-
-                let (w,p3) = r.read_value(p2);
-                p = p3;
-                (sig,w)
-                // let mut h = new_hasher();
-                // sig.hash(&mut h);
-                // w.hash(&mut h);
-                // h.finish()
-            }).collect();
-            repr.sort_unstable();
-            for &sig in repr.iter().dedup() { sig.hash(&mut hasher); }
-        },
-        _ => panic!("Unknown typ.")
-    }
-    return (hasher.finish(), p);
-}
-
-pub unsafe fn canonicalize_unsafe64<'a>(p : *const u8, r: &CReader, ids: &[u64]) -> (u64, *const u8) {
-    let (w,p) = r.read_node(p);
-    if is_state(w) {
-        return (ids[get_state(w) as usize] as u64, p);
-    } else {
-        return canonicalize_node_unsafe64(p, r, ids, get_header(w));
-    }
-}
-
-pub fn repartition_unsafe64(coa : &Coalg, states: &[u32], ids: &[u64]) -> Vec<u64> {
-    let mut sigs = vec![];
-    sigs.reserve(states.len());
-    for &state in states {
-        let p = coa.locs[state as usize];
-        unsafe {
-            let (sig,_rest) = canonicalize_unsafe64(p, &coa.reader, ids);
-            sigs.push(sig);
+fn repartition_all<I:Ids+?Sized>(data: &[u8], r: &CReader, ids: &I) -> Vec<u64> {
+    let mut scratch = vec![];
+    let mut new_ids_raw = vec![];
+    unsafe {
+        let mut p = data.as_ptr();
+        while !CReader::is_at_end(data, p) {
+            let (sig, p_next) = canonicalize(p, r, ids, &mut scratch);
+            new_ids_raw.push(sig);
+            p = p_next;
         }
     }
-    return sigs;
+    return new_ids_raw
 }
 
 pub fn repartition_all_unsafe64(data: &[u8], r: &CReader, ids: &[u64]) -> Vec<u64> {
-    unsafe {
-        let mut new_ids_raw = vec![];
-        new_ids_raw.reserve(ids.len());
-        let mut p = data.as_ptr();
-        while !CReader::is_at_end(data, p) {
-            let (sig, p_next) = canonicalize_unsafe64(p, r, ids);
-            new_ids_raw.push(sig);
-            p = p_next;
-        }
-        return new_ids_raw
-    }
-}
-
-pub unsafe fn canonicalize_node_unsafe_init<'a>(mut p : *const u8, r: &CReader, w: u32) -> (u64, *const u8) {
-    let (typ,tag,len) = decode_header(w);
-    let mut hasher = new_hasher();
-    (typ,tag).hash(&mut hasher);
-    match typ {
-        LIST_TYP => {
-            for _ in 0..len {
-                let (sig, p2) = canonicalize_unsafe_init(p, r);
-                sig.hash(&mut hasher);
-                p = p2;
-            }
-        },
-        SET_TYP => {
-            let mut repr: Vec<u64> = (0..len).map(|_| {
-                let (sig, p2) = canonicalize_unsafe_init(p, r);
-                p = p2; sig
-            }).collect();
-            repr.sort_unstable();
-            for &sig in repr.iter().dedup() { sig.hash(&mut hasher); }
-        },
-        ADD_TYP|MAX_TYP|OR_TYP => {
-            let mut repr: Vec<(u64,u64)> = (0..len).map(|_| {
-                let (sig, p2) = canonicalize_unsafe_init(p, r);
-                let (w,p3) = r.read_value(p2);
-                p = p3;
-                (sig,w)
-            }).collect();
-            match typ {
-                ADD_TYP => hash_with_op(&mut repr, &mut hasher, |a,b| a+b),
-                OR_TYP => hash_with_op(&mut repr, &mut hasher, |a,b| a|b),
-                MAX_TYP => hash_with_op(&mut repr, &mut hasher, |a,b| max(a,b)),
-                _ => panic!("Unreachable")
-            }
-        },
-        TAG_TYP => {
-            let mut repr: Vec<(u64,u64)> = (0..len).map(|_| {
-                let (sig, p2) = canonicalize_unsafe_init(p, r);
-                let (w,p3) = r.read_value(p2);
-                p = p3;
-                (sig,w)
-            }).collect();
-            repr.sort_unstable();
-            for &sig in repr.iter().dedup() { sig.hash(&mut hasher); }
-        },
-        _ => panic!("Unknown typ.")
-    }
-    return (hasher.finish(), p);
-}
-
-pub unsafe fn canonicalize_unsafe_init<'a>(p : *const u8, r: &CReader) -> (u64, *const u8) {
-    let (w,p) = r.read_node(p);
-    if is_state(w) {
-        return (0, p);
-    } else {
-        return canonicalize_node_unsafe_init(p, r, get_header(w));
-    }
+    repartition_all(data, r, ids)
 }
 
 pub fn init_partition_ids_unsafe(data: &[u8], r: &CReader) -> Vec<u64> {
-    unsafe {
-        let mut new_ids_raw = vec![];
-        let mut p = data.as_ptr();
-        while !CReader::is_at_end(data, p) {
-            let (sig, p_next) = canonicalize_unsafe_init(p, r);
-            new_ids_raw.push(sig);
-            p = p_next;
-        }
-        return new_ids_raw
-    }
+    repartition_all(data, r, &InitIds)
 }

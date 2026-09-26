@@ -1,4 +1,4 @@
-use std::collections::VecDeque;
+use std::{collections::VecDeque, ops::Range};
 
 use datasize::DataSize;
 
@@ -75,6 +75,10 @@ pub struct RefinablePartition {
   pub state2block: Vec<u32>, // send each state to the surrounding block
   pub partition: Vec<(u32,u32,u32)>, // vector of blocks (start, mid, end) where the states in start..mid are dirty and mid..end are clean. all intervals are half-open (inclusive start, exclusive end).
   pub worklist: VecDeque<u32>, // worklist: blocks with at least one dirty state
+  // scratch buffers reused by refine
+  counts: Vec<u32>,
+  cum_counts: Vec<u32>,
+  tmp_states: Vec<State>,
 }
 
 impl RefinablePartition {
@@ -84,7 +88,10 @@ impl RefinablePartition {
           position: (0..num_states).collect(),
           state2block: vec![0;num_states as usize],
           partition: vec![(0, 0, num_states)], // for partition (start, mid, end), the states start..mid are clean and mid..end are dirty
-          worklist: VecDeque::from(vec![0])
+          worklist: VecDeque::from(vec![0]),
+          counts: vec![],
+          cum_counts: vec![],
+          tmp_states: vec![],
       }
   }
 
@@ -143,25 +150,41 @@ impl RefinablePartition {
 
   /// TODO: Optimisation: assign the old ID to the block with the fewest predecessors
   /// Time complexity: O(signatures.len())
-  /// Returns vector of new partition ids
+  /// Returns the range of new partition ids
   /// Signatures are assumed to be 0..n with the first starting with 0
-  pub fn refine(self: &mut RefinablePartition, partition_id: u32, signatures: &[u32]) -> Vec<u32> {
-      // let signatures = renumber(signatures); // Renumber signatures to be 0..n. This makes the sig of the clean states 0 if there are any.
+  pub fn refine(self: &mut RefinablePartition, partition_id: u32, signatures: &[u32]) -> Range<u32> {
+      let (start,mid,end) = self.partition[partition_id as usize];
+      let next_available_partition_id = self.partition.len() as u32;
 
       // compute the occurrence counts of each of the signatures
-      let mut counts = counts_vec(&signatures);
+      let counts = &mut self.counts;
+      counts.clear();
+      for &sig in signatures {
+          if sig as usize >= counts.len() { counts.resize(sig as usize + 1, 0) }
+          counts[sig as usize] += 1;
+      }
 
-      let (start,mid,end) = self.partition[partition_id as usize];
+      if counts.len() == 1 {
+          // The block does not split, so all of its states are clean now.
+          self.partition[partition_id as usize] = (start, end, end);
+          return next_available_partition_id..next_available_partition_id;
+      }
+
       if start < mid { counts[0] += mid - start - 1 } // add count of clean part
-      // println!("refine: {:?}", &counts);
 
       // sort the relevant part of self.buffer by signature
       // also restores invariant for self.position and self.partition_id
-      let largest_partition = index_of_max(&counts) as u32;
-      let next_available_partition_id = self.partition.len() as u32;
+      let largest_partition = index_of_max(counts) as u32;
 
-      let mut cum_counts = cumsum(&counts);
-      let original_states = self.refiners(partition_id).to_vec();
+      let cum_counts = &mut self.cum_counts;
+      cum_counts.clear();
+      cum_counts.extend_from_slice(counts);
+      cumsum_mut(cum_counts);
+
+      let refiners_start = if start == mid { start } else { mid - 1 };
+      let original_states = &mut self.tmp_states;
+      original_states.clear();
+      original_states.extend_from_slice(&self.buffer[refiners_start as usize..end as usize]);
 
       for i in 0..original_states.len() {
           let sig = signatures[i];
@@ -189,10 +212,6 @@ impl RefinablePartition {
       debug_assert_eq!(cum_counts[0],0);
       debug_assert_eq!(cum_counts[cum_counts.len()-1] + counts[counts.len()-1], end - start);
 
-
-      // we will return vector of the new partitions
-      let mut new_partitions: Vec<u32> = vec![];
-
       // restore invariant of self.partition
       for sig in 0..counts.len() as u32 {
           let new_start = start+cum_counts[sig as usize];
@@ -201,12 +220,12 @@ impl RefinablePartition {
           if sig == largest_partition {
               self.partition[partition_id as usize] = new_part;
           } else {
-              new_partitions.push(self.partition.len() as u32);
               self.partition.push(new_part);
           }
       }
 
-      return new_partitions;
+      crate::optalg::release_if_large(&mut self.tmp_states);
+      return next_available_partition_id..self.partition.len() as u32;
   }
 }
 
@@ -250,7 +269,7 @@ mod partition_tests {
 
       assert_eq!(partition.worklist.pop_front(), Some(0));
       let new_blocks = partition.refine(0, &[0, 1, 0, 2, 1, 2]);
-      assert_eq!(new_blocks, [1, 2]);
+      assert_eq!(new_blocks, 1..3);
       assert_invariants(&partition);
 
       partition.mark_dirty(0);
@@ -261,7 +280,7 @@ mod partition_tests {
 
       assert_eq!(partition.worklist.pop_front(), Some(1));
       let new_blocks = partition.refine(1, &[0, 1]);
-      assert_eq!(new_blocks, [3]);
+      assert_eq!(new_blocks, 3..4);
       assert_invariants(&partition);
 
       partition.mark_dirty(0);
