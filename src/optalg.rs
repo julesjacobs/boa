@@ -17,6 +17,24 @@ fn partref_nlogn_raw(data: Vec<u8>, r: CReader) -> Vec<u32> {
   // panic!("Stopped");
   let start_time = SystemTime::now();
   // print!("Initializing backrefs...");
+  if let Some(graph) = crate::flat_add::FlatUnitAdd::from_coalg(&data, &r, false) {
+      println!("backrefs_time_s: {}", start_time.elapsed().unwrap().as_secs_f32());
+      println!("m_edges: {}", graph.num_edges());
+      let start = SystemTime::now();
+      let result = graph.refine_counts();
+      println!("iter_time_s: {}", start.elapsed().unwrap().as_secs_f32());
+      println!("selfreport_time_s: {}", start_time.elapsed().unwrap().as_secs_f32());
+      return result;
+  }
+  if let Some(graph) = crate::shared_add::SharedAdd::decode(&data, &r) {
+      println!("backrefs_time_s: {}", start_time.elapsed().unwrap().as_secs_f32());
+      println!("m_edges: {}", graph.num_edges());
+      let start = SystemTime::now();
+      let result = graph.refine();
+      println!("iter_time_s: {}", start.elapsed().unwrap().as_secs_f32());
+      println!("selfreport_time_s: {}", start_time.elapsed().unwrap().as_secs_f32());
+      return result;
+  }
   let coa = Coalg::new(data, r);
   let backrefs_time = start_time.elapsed().unwrap();
   println!("backrefs_time_s: {}", backrefs_time.as_secs_f32());
@@ -65,7 +83,7 @@ fn partref_nlogn_raw(data: Vec<u8>, r: CReader) -> Vec<u32> {
   println!("iter_time_s: {}", iter_time.as_secs_f32());
   let selfreport_time = start_time.elapsed().unwrap();
   println!("selfreport_time_s: {}", selfreport_time.as_secs_f32());
-  return partition.state2block;
+  return renumber_dense(&partition.state2block);
 }
 
 /// Buffers above this many elements are freed after use rather than kept around,
@@ -149,9 +167,7 @@ fn test_renumber_dense() {
 }
 
 pub fn partref_nlogn(data: Vec<u8>, r: CReader) -> Vec<u32> {
-  let ids = partref_nlogn_raw(data, r);
-  // block ids are smaller than the number of blocks, which is at most the number of states
-  return renumber_dense(&ids);
+  partref_nlogn_raw(data, r)
 }
 
 #[test]

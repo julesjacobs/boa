@@ -11,6 +11,13 @@ mod coalg;
 mod refpart;
 mod naivealg;
 mod optalg;
+mod count_refinement;
+mod compact_refinement;
+mod stack_compact_refinement;
+mod dense_stability;
+mod small_stability;
+mod flat_add;
+mod shared_add;
 
 
 fn renumber<A> (ids: &[A]) -> Vec<u32>
@@ -124,7 +131,7 @@ fn main() {
             };
             // let computation_time = start_time.elapsed().unwrap();
             println!("n_states: {}", ids.len());
-            println!("n_states_min: {}", ids.iter().max().unwrap()+1);
+            println!("n_states_min: {}", ids.iter().max().map_or(0, |id| id + 1));
             // println!("selfreport_time_s: {}", computation_time.as_secs_f32());
         },
     }

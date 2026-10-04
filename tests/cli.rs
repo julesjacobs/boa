@@ -68,3 +68,60 @@ fn cli_reports_help_and_rejects_missing_arguments() {
         .unwrap()
         .contains("USAGE:"));
 }
+
+#[test]
+fn cli_refines_unit_add_inputs_and_weighted_fallback() {
+    let temp_dir = TempDir::new();
+    let cases = [
+        ("flat", "Add[0]{@1:1}\nAdd[0]{@0:1,@2:1}\nAdd[0]{@1:1}", 2, 4),
+        ("nested", "Add[0]{Add[0]{@0:1,@1:1}:1,Add[0]{@0:1}:1}\nAdd[0]{Add[0]{@0:1,@1:1}:1,Add[0]{@1:1,@2:1}:1}\nAdd[0]{Add[0]{@1:1,@2:1}:1}", 3, 9),
+        ("weighted", "Add[0]{@0:2}\nAdd[0]{@1:2}\nAdd[0]{@2:3}", 2, 3),
+    ];
+    for (name, input, classes, edges) in cases {
+        let text_path = temp_dir.0.join(format!("{name}.boa.txt"));
+        let binary_path = temp_dir.0.join(format!("{name}.boa"));
+        fs::write(&text_path, input).unwrap();
+        assert!(boa(&["convert", text_path.to_str().unwrap()])
+            .status
+            .success());
+        for algorithm in ["naive", "nlogn"] {
+            let output = boa(&[algorithm, binary_path.to_str().unwrap()]);
+            assert!(output.status.success(), "{name}: {output:?}");
+            let stdout = String::from_utf8(output.stdout).unwrap();
+            assert!(stdout.contains("n_states: 3\n"), "{stdout}");
+            assert!(
+                stdout.contains(&format!("n_states_min: {classes}\n")),
+                "{stdout}"
+            );
+            if algorithm == "nlogn" {
+                assert!(stdout.contains(&format!("m_edges: {edges}\n")), "{stdout}");
+                for field in [
+                    "parsing_time_s",
+                    "backrefs_time_s",
+                    "iter_time_s",
+                    "selfreport_time_s",
+                ] {
+                    assert!(stdout.contains(&format!("{field}: ")), "{stdout}");
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn cli_refines_empty_inputs() {
+    let temp_dir = TempDir::new();
+    let text_path = temp_dir.0.join("empty.boa.txt");
+    let binary_path = temp_dir.0.join("empty.boa");
+    fs::write(&text_path, "").unwrap();
+    assert!(boa(&["convert", text_path.to_str().unwrap()])
+        .status
+        .success());
+    for algorithm in ["naive", "nlogn"] {
+        let output = boa(&[algorithm, binary_path.to_str().unwrap()]);
+        assert!(output.status.success(), "{output:?}");
+        let stdout = String::from_utf8(output.stdout).unwrap();
+        assert!(stdout.contains("n_states: 0\n"), "{stdout}");
+        assert!(stdout.contains("n_states_min: 0\n"), "{stdout}");
+    }
+}

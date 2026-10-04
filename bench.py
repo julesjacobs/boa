@@ -23,8 +23,10 @@ except FileNotFoundError:
     exit(1)
 
 
-def extract(keyre, outp):
+def extract(keyre, outp, required=True):
   x = re.findall(keyre, outp,re.MULTILINE)
+  if not x and not required:
+    return None
   if len(x) != 1:
     print(f"Problem with program output for regex {keyre=}:")
     print(outp)
@@ -45,12 +47,16 @@ def runboa(file):
 
   stats = [
     (str, ['file', 'algorithm']),
-    (float, ['size_mb', 'parsing_time_s', 'backrefs_time_s', 'selfreport_time_s', 'iter_time_s', 'coalg_refs_mb',  'refpart_mb']),
-    (int, ['m_edges', 'iters', 'n_states', 'n_states_min'])
+    (float, ['size_mb', 'parsing_time_s', 'backrefs_time_s', 'selfreport_time_s', 'iter_time_s']),
+    (int, ['m_edges', 'n_states', 'n_states_min'])
   ]
   for (fn,stattype) in stats:
     for stat in stattype:
       d[stat] = fn(extract(stat + ': (.+)\n',program_output))
+  for fn, names in [(float, ['coalg_refs_mb', 'refpart_mb']), (int, ['iters'])]:
+    for stat in names:
+      value = extract(stat + ': (.+)\n', program_output, required=False)
+      d[stat] = fn(value) if value is not None else None
   return d
 
 def runmcrl2(algorithm="bisim"):
