@@ -1,7 +1,7 @@
 use std::io::{BufRead, BufWriter, Write, Read};
 use std::{path::Path, fs::File, io::BufReader};
 
-use byteorder::{ReadBytesExt, LittleEndian, WriteBytesExt};
+use byteorder::{LittleEndian, WriteBytesExt};
 
 use crate::binrep::{CReader, TAG_TYP};
 use crate::binrep::CWriter;
@@ -65,11 +65,13 @@ where P: AsRef<Path>, {
     let mut file = File::open(&filename).
         expect(&format!("Couldn't open file {:?}", filename.as_ref().display().to_string()));
     let mut r = CReader { headers: [0;128], values: [0;128] };
-    for i in 0..r.headers.len() {
-        r.headers[i] = file.read_u32::<LittleEndian>().expect("File reading error.");
+    let mut tables = [0_u8; 128 * 4 + 128 * 8];
+    file.read_exact(&mut tables).expect("File reading error.");
+    for (header, bytes) in r.headers.iter_mut().zip(tables[..128 * 4].chunks_exact(4)) {
+        *header = u32::from_le_bytes(bytes.try_into().unwrap());
     }
-    for i in 0..r.values.len() {
-        r.values[i] = file.read_u64::<LittleEndian>().expect("File reading error.");
+    for (value, bytes) in r.values.iter_mut().zip(tables[128 * 4..].chunks_exact(8)) {
+        *value = u64::from_le_bytes(bytes.try_into().unwrap());
     }
     let size = file.metadata().map(|m| m.len() as usize + 1).unwrap_or(0);
     let mut data = Vec::with_capacity(size);
